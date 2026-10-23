@@ -9,8 +9,11 @@ interface FamilyHeroPieceProps {
   color: 'w' | 'b';
   targetPosition: [number, number, number];
   heroConfig: FamilyHeroConfig;
+  useSecondarySkin?: boolean; // For alternating the 2nd Cousin skin on Pawns
   isSelected: boolean;
   isCheckThreatened: boolean;
+  isShielded?: boolean; // Dungeon Superpower: Royal Shield
+  isFrozen?: boolean; // Dungeon Superpower: Aunt's Sunglass Freeze
   isLastMoved: boolean;
   showNameplate: boolean;
   onSelect: () => void;
@@ -22,7 +25,7 @@ const ROLE_HEIGHT_SCALE: Record<PieceRole, number> = {
   b: 1.32,
   n: 1.24,
   r: 1.34,
-  p: 1.08,
+  p: 1.12,
 };
 
 export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
@@ -30,8 +33,11 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   color,
   targetPosition,
   heroConfig,
+  useSecondarySkin = false,
   isSelected,
   isCheckThreatened,
+  isShielded = false,
+  isFrozen = false,
   isLastMoved,
   showNameplate,
   onSelect,
@@ -39,20 +45,33 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   const groupRef = useRef<THREE.Group>(null);
   const spriteRef = useRef<THREE.Group>(null);
   const auraRingRef = useRef<THREE.Mesh>(null);
+  const shieldDomeRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
 
-  // Smoothly interpolate position & jump arc on move
   const currentPos = useRef(new THREE.Vector3(...targetPosition));
   const prevTarget = useRef(new THREE.Vector3(...targetPosition));
   const jumpProgress = useRef(1);
 
-  // Load transparent PNG sprite of the family member
+  // Pick primary or secondary cousin sprite path
+  const activeSpriteJpg = useMemo(() => {
+    if (useSecondarySkin && heroConfig.secondarySpritePath) {
+      return heroConfig.secondarySpritePath;
+    }
+    return heroConfig.spritePath;
+  }, [useSecondarySkin, heroConfig.secondarySpritePath, heroConfig.spritePath]);
+
   const pngPath = useMemo(
-    () => heroConfig.spritePath.replace('.jpg', '.png'),
-    [heroConfig.spritePath]
+    () => activeSpriteJpg.replace('.jpg', '.png'),
+    [activeSpriteJpg]
   );
+
   const texture = useTexture(pngPath);
   texture.colorSpace = THREE.SRGBColorSpace;
+
+  const displayName =
+    useSecondarySkin && heroConfig.secondaryCustomName
+      ? heroConfig.secondaryCustomName
+      : heroConfig.customName;
 
   const isGoldTeam = color === 'w';
   const primaryTeamColor = isGoldTeam ? '#fbbf24' : '#a855f7';
@@ -76,9 +95,11 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
     currentPos.current.lerp(targetVec, Math.min(1, delta * 10));
 
     // Parabolic hop arc (especially high for the Daughter / Knight!)
-    const arcMultiplier = role === 'n' ? 1.15 : 0.55;
+    const arcMultiplier = role === 'n' ? 1.2 : 0.58;
     const hopHeight = Math.sin(jumpProgress.current * Math.PI) * arcMultiplier;
-    const selectedLift = isSelected ? 0.25 + Math.sin(state.clock.elapsedTime * 5) * 0.06 : 0;
+    const selectedLift = isSelected
+      ? 0.25 + Math.sin(state.clock.elapsedTime * 5) * 0.06
+      : 0;
 
     groupRef.current.position.set(
       currentPos.current.x,
@@ -86,15 +107,21 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
       currentPos.current.z
     );
 
-    // Gentle breathing / idle animation on the 3D miniature
     if (spriteRef.current) {
-      const t = state.clock.elapsedTime + targetPosition[0] * 0.7 + targetPosition[2] * 0.5;
-      const breath = 1 + Math.sin(t * 2.6) * 0.025;
+      const t =
+        state.clock.elapsedTime +
+        targetPosition[0] * 0.7 +
+        targetPosition[2] * 0.5;
+      const breath = isFrozen ? 1 : 1 + Math.sin(t * 2.6) * 0.026;
       spriteRef.current.scale.set(baseScale, baseScale * breath, baseScale);
     }
 
     if (auraRingRef.current) {
       auraRingRef.current.rotation.z += delta * (isSelected ? 2.4 : 0.8);
+    }
+
+    if (shieldDomeRef.current) {
+      shieldDomeRef.current.rotation.y += delta * 1.4;
     }
   });
 
@@ -137,9 +164,8 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         />
       </mesh>
 
-      {/* Role-Specific 3D Pedestal Ornament (Crown / Turret / Arcane Ring) */}
+      {/* Castle Battlements around Rook base */}
       {role === 'r' && (
-        // Castle Battlements around Rook base
         <group position={[0, 0.24, 0]}>
           {[0, 1, 2, 3, 4, 5].map((i) => {
             const angle = (i * Math.PI) / 3;
@@ -150,22 +176,60 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
                 castShadow
               >
                 <boxGeometry args={[0.09, 0.1, 0.09]} />
-                <meshStandardMaterial color={primaryTeamColor} metalness={0.8} roughness={0.2} />
+                <meshStandardMaterial
+                  color={primaryTeamColor}
+                  metalness={0.8}
+                  roughness={0.2}
+                />
               </mesh>
             );
           })}
         </group>
       )}
 
+      {/* Floating Royal Halo Ring at the base of King & Queen */}
       {(role === 'k' || role === 'q') && (
-        // Floating Royal Halo Ring at the base of King & Queen
-        <mesh ref={auraRingRef} position={[0, 0.23, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh
+          ref={auraRingRef}
+          position={[0, 0.23, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
           <ringGeometry args={[0.36, 0.44, 6]} />
           <meshBasicMaterial
             color={role === 'k' ? '#fbbf24' : '#e879f9'}
             side={THREE.DoubleSide}
             transparent
             opacity={0.85}
+          />
+        </mesh>
+      )}
+
+      {/* Superpower Active Effect: Golden Paladin Shield Dome */}
+      {isShielded && (
+        <mesh ref={shieldDomeRef} position={[0, 0.72, 0]}>
+          <icosahedronGeometry args={[0.62, 1]} />
+          <meshStandardMaterial
+            color="#fbbf24"
+            emissive="#f59e0b"
+            emissiveIntensity={0.8}
+            wireframe
+            transparent
+            opacity={0.75}
+          />
+        </mesh>
+      )}
+
+      {/* Superpower Active Effect: Aunt's Sapphire Ice Crystal Freeze */}
+      {isFrozen && (
+        <mesh position={[0, 0.68, 0]}>
+          <octahedronGeometry args={[0.6, 0]} />
+          <meshStandardMaterial
+            color="#38bdf8"
+            emissive="#0284c7"
+            emissiveIntensity={0.7}
+            transparent
+            opacity={0.48}
+            roughness={0.1}
           />
         </mesh>
       )}
@@ -182,11 +246,16 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
       {isLastMoved && !isSelected && (
         <mesh position={[0, 0.025, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.39, 0.46, 24]} />
-          <meshBasicMaterial color={secondaryTeamColor} transparent opacity={0.65} side={THREE.DoubleSide} />
+          <meshBasicMaterial
+            color={secondaryTeamColor}
+            transparent
+            opacity={0.65}
+            side={THREE.DoubleSide}
+          />
         </mesh>
       )}
 
-      {/* 2. 3D Family Hero Miniature Standee (Double-layered depth with team aura) */}
+      {/* 2. 3D Family Hero Miniature Standee */}
       <Billboard
         position={[0, 0.21 + baseScale * 0.45, 0]}
         follow={true}
@@ -195,7 +264,6 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         lockZ={false}
       >
         <group ref={spriteRef} scale={[baseScale, baseScale, baseScale]}>
-          {/* Subtle glowing team aura disc behind the hero */}
           <mesh position={[0, 0.02, -0.04]}>
             <circleGeometry args={[0.38, 24]} />
             <meshBasicMaterial
@@ -205,7 +273,6 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
             />
           </mesh>
 
-          {/* Back rim silhouette for 3D miniature thickness */}
           <mesh position={[0, 0, -0.02]}>
             <planeGeometry args={[0.88, 0.96]} />
             <meshBasicMaterial
@@ -216,7 +283,6 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
             />
           </mesh>
 
-          {/* Main high-res Family Hero Miniature */}
           <mesh castShadow>
             <planeGeometry args={[0.85, 0.93]} />
             <meshStandardMaterial
@@ -225,14 +291,24 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
               alphaTest={0.08}
               roughness={0.35}
               metalness={0.1}
-              emissive={isGoldTeam ? '#451a03' : '#2e1065'}
-              emissiveIntensity={isGoldTeam ? 0.08 : 0.22}
+              emissive={
+                isFrozen
+                  ? '#0284c7'
+                  : isShielded
+                  ? '#b45309'
+                  : isGoldTeam
+                  ? '#451a03'
+                  : '#2e1065'
+              }
+              emissiveIntensity={
+                isFrozen || isShielded ? 0.45 : isGoldTeam ? 0.08 : 0.22
+              }
             />
           </mesh>
         </group>
 
-        {/* Floating RPG Hero Badge on Hover / Selection / Nameplate Toggle */}
-        {(hovered || isSelected || showNameplate) && (
+        {/* Floating RPG Hero Badge */}
+        {(hovered || isSelected || showNameplate || isShielded || isFrozen) && (
           <Html
             position={[0, baseScale * 0.56, 0]}
             center
@@ -241,14 +317,22 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
           >
             <div
               className={`pointer-events-none px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap shadow-lg border backdrop-blur-md transition-all ${
-                isGoldTeam
+                isFrozen
+                  ? 'bg-sky-950/95 text-sky-200 border-sky-400'
+                  : isShielded
+                  ? 'bg-amber-900/95 text-amber-100 border-yellow-300'
+                  : isGoldTeam
                   ? 'bg-amber-950/90 text-amber-200 border-amber-400/80'
                   : 'bg-purple-950/90 text-purple-200 border-purple-400/80'
               }`}
             >
-              <span className="mr-1">{isGoldTeam ? '☀️' : '🌙'}</span>
-              {heroConfig.customName}
-              <span className="opacity-70 font-normal ml-1">({heroConfig.chessName})</span>
+              <span className="mr-1">
+                {isFrozen ? '❄️' : isShielded ? '🛡️' : isGoldTeam ? '☀️' : '🌙'}
+              </span>
+              {displayName}
+              <span className="opacity-70 font-normal ml-1">
+                ({heroConfig.chessName})
+              </span>
             </div>
           </Html>
         )}

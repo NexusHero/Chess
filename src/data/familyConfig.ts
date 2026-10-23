@@ -1,22 +1,30 @@
 export type PieceRole = 'k' | 'q' | 'r' | 'b' | 'n' | 'p';
 
+export interface SuperpowerConfig {
+  id: string;
+  name: string;
+  icon: string;
+  shortDesc: string;
+  fullDesc: string;
+}
+
 export interface FamilyHeroConfig {
   role: PieceRole;
   chessName: string;
   familyTitle: string;
   customName: string;
+  secondaryCustomName?: string; // For the 2nd Cousin skin on Pawns
   dungeonClass: string;
   description: string;
   weapon: string;
   battleCry: string;
   captureQuotes: string[];
   accentColor: string;
-  avatarCrop: {
-    col: number; // 0, 1, 2 in 3x2 sheet
-    row: number; // 0, 1 in 3x2 sheet
-  };
   spritePath: string;
+  secondarySpritePath?: string; // Alternating 2nd Cousin skin for Pawns
   photoReference?: string;
+  customAudioDataUrl?: string; // Recorded real family voice clip (base64 audio)
+  superpower: SuperpowerConfig;
 }
 
 export interface DungeonLevelConfig {
@@ -27,7 +35,7 @@ export interface DungeonLevelConfig {
   bossTitle: string;
   difficultyLabel: string;
   aiDepth: number;
-  aiRandomness: number; // 0 = perfect, 0.6 = beginner friendly
+  aiRandomness: number;
   description: string;
   theme: {
     bgGradient: string;
@@ -45,6 +53,75 @@ export interface DungeonLevelConfig {
   };
 }
 
+export interface TreasureQuestConfig {
+  id: number;
+  title: string;
+  heroRole: PieceRole;
+  story: string;
+  startSquare: string;
+  treasures: string[]; // Squares containing golden treasure chests / stars
+  obstacles: string[]; // Lava / sleeping gargoyle squares to jump over or avoid
+  recommendedMoves: number;
+}
+
+export const TREASURE_QUESTS: TreasureQuestConfig[] = [
+  {
+    id: 1,
+    title: 'Mission 1: Prinzessin Minis großer L-Sprung',
+    heroRole: 'n',
+    story:
+      'Unsere Tochter hüpft als Wirbelwind-Ritterin im L-Sprung über jedes Hindernis! Sammle alle 3 goldenen Schatztruhen ein!',
+    startSquare: 'd4',
+    treasures: ['f5', 'e7', 'c6'],
+    obstacles: ['d5', 'e4', 'e5', 'd6'],
+    recommendedMoves: 3,
+  },
+  {
+    id: 2,
+    title: 'Mission 2: Königin Annes Sternen-Magie',
+    heroRole: 'q',
+    story:
+      'Mama gleitet als Erzmagierin gerade und diagonal über das ganze Brett! Sammle alle 4 funkelnden Schatztruhen, ohne auf die roten Lava-Felder zu treten!',
+    startSquare: 'd1',
+    treasures: ['d7', 'h7', 'e4', 'a4'],
+    obstacles: ['d5', 'f6', 'c4'],
+    recommendedMoves: 4,
+  },
+  {
+    id: 3,
+    title: 'Mission 3: Tante Boss & die Kristall-Diagonale',
+    heroRole: 'b',
+    story:
+      'Mit cooler Sonnenbrille und Saphirstab saust die Tante quer über die Diagonalen. Hol dir alle 3 Truhen!',
+    startSquare: 'c1',
+    treasures: ['f4', 'c7', 'a5'],
+    obstacles: ['d3', 'e5'],
+    recommendedMoves: 3,
+  },
+  {
+    id: 4,
+    title: 'Mission 4: Cousin Tanks Festungs-Walze',
+    heroRole: 'r',
+    story:
+      'Der Cousin rollt mit seinen Panzerfäusten schnurgerade über die Linien! Räume alle 4 Schatztruhen in den Ecken ab!',
+    startSquare: 'a1',
+    treasures: ['a8', 'h8', 'h1', 'd1'],
+    obstacles: ['d4', 'e4', 'd5', 'e5'],
+    recommendedMoves: 4,
+  },
+  {
+    id: 5,
+    title: 'Mission 5: König Babas Krönungs-Marsch',
+    heroRole: 'k',
+    story:
+      'Schritt für Schritt führt der Familien-König mit seinem Runenschwert durch das Labyrinth zu den 3 Königskronen-Truhen!',
+    startSquare: 'e2',
+    treasures: ['d3', 'e4', 'f5'],
+    obstacles: ['d4', 'f4', 'e3'],
+    recommendedMoves: 3,
+  },
+];
+
 export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
   k: {
     role: 'k',
@@ -52,18 +129,26 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
     familyTitle: 'Der Familien-König (Papa)',
     customName: 'König Baba',
     dungeonClass: 'Paladin des Goldenen Throns',
-    description: 'Mit dunklem Vollbart, goldener Königskrone, rotem Umhang und dem leuchtenden Runenschwert beschützt er die gesamte Familie.',
+    description:
+      'Mit dunklem Vollbart, goldener Königskrone, rotem Umhang und dem leuchtenden Runenschwert beschützt er die gesamte Familie.',
     weapon: 'Sonnenklinge & Königsschild',
     battleCry: 'Für die Familie! Niemand kommt an meinem Bart vorbei!',
     captureQuotes: [
       'Der König regelt das persönlich! ⚔️👑',
       'Schach-Ehre des Familienoberhaupts!',
-      'Platz da, hier kommt das Königsschwert!'
+      'Platz da, hier kommt das Königsschwert!',
     ],
     accentColor: '#f59e0b',
-    avatarCrop: { col: 0, row: 0 },
     spritePath: '/assets/heroes/king.jpg',
     photoReference: '/assets/photos/king_queen.jpg',
+    superpower: {
+      id: 'royal_shield',
+      name: 'Goldener Königsschild',
+      icon: '🛡️',
+      shortDesc: 'Schützt eine eigene Figur 1 Runde lang',
+      fullDesc:
+        'Verleiht der ausgewählten Figur einen unzerbrechlichen goldenen Paladin-Schild, sodass sie im nächsten gegnerischen Zug nicht geschlagen werden kann!',
+    },
   },
   q: {
     role: 'q',
@@ -71,18 +156,26 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
     familyTitle: 'Die Königin (Mama)',
     customName: 'Königin Anne',
     dungeonClass: 'Erzmagierin des Sternenlichts',
-    description: 'Mit edlem, goldbesticktem Kopftuch und Diadem beherrscht sie alle Linien und Diagonalen mit funkelnder Arkan-Magie.',
+    description:
+      'Mit edlem, goldbesticktem Kopftuch und Diadem beherrscht sie alle Linien und Diagonalen mit funkelnder Arkan-Magie.',
     weapon: 'Sternen-Aura & Lichtsphäre',
     battleCry: 'Einer Königin entgeht auf diesem Brett gar nichts!',
     captureQuotes: [
       'Magischer Volltreffer der Königin! ✨👑',
       'Mama sieht jeden Zug drei Schritte voraus!',
-      'Mit Licht und Magie vom Feld gefegt!'
+      'Mit Licht und Magie vom Feld gefegt!',
     ],
     accentColor: '#c084fc',
-    avatarCrop: { col: 1, row: 0 },
     spritePath: '/assets/heroes/queen.jpg',
     photoReference: '/assets/photos/king_queen.jpg',
+    superpower: {
+      id: 'queen_nova',
+      name: 'Sternenlicht-Teleport',
+      icon: '✨',
+      shortDesc: 'Heilt & schützt König + Dame mit Licht-Aura',
+      fullDesc:
+        'Hüllt König und Königin in eine leuchtende Sternen-Barriere und schenkt deiner Seite sofort einen Bonus-Tipp für den stärksten Gewinnzug!',
+    },
   },
   n: {
     role: 'n',
@@ -90,18 +183,26 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
     familyTitle: 'Unsere Tochter (Heldin)',
     customName: 'Prinzessin Mini',
     dungeonClass: 'Wirbelwind-Ritterin mit zwei Zöpfen',
-    description: 'Mit ihren zwei süßen Zöpfen und dem roten Abenteurer-Cape hüpft sie im L-Sprung furchtlos über jede Mauer und Figur hinweg!',
+    description:
+      'Mit ihren zwei süßen Zöpfen und dem roten Abenteurer-Cape hüpft sie im L-Sprung furchtlos über jede Mauer und Figur hinweg!',
     weapon: 'Funkelnder Sternen-Degen',
     battleCry: 'Hüpf, hüpf – Überraschung von oben!',
     captureQuotes: [
       'Zack! Über alle drübergehüpft! 🦄⚔️',
       'Zöpfe im Wind – Feld gewonnen!',
-      'Kuckuck! Damit hast du nicht gerechnet!'
+      'Kuckuck! Damit hast du nicht gerechnet!',
     ],
     accentColor: '#f43f5e',
-    avatarCrop: { col: 0, row: 1 },
     spritePath: '/assets/heroes/knight.jpg',
     photoReference: '/assets/photos/daughter.jpg',
+    superpower: {
+      id: 'double_hop',
+      name: 'Wirbelwind-Doppelzug',
+      icon: '🦄',
+      shortDesc: 'Darf nach diesem Zug sofort noch einmal ziehen!',
+      fullDesc:
+        'Wenn Prinzessin Mini aktiviert wird, darf dein Team nach einem normalen Zug (ohne Schachgebot) direkt ein zweites Mal ziehen!',
+    },
   },
   b: {
     role: 'b',
@@ -109,18 +210,26 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
     familyTitle: 'Die Tante (mit cooler Sonnenbrille)',
     customName: 'Tante Boss',
     dungeonClass: 'Runen-Meisterin & Königliche Beraterin',
-    description: 'Selbst im tiefsten Dungeon sitzt die Sonnenbrille perfekt! Mit ihrem blauen Kristallstab blitzt sie quer über die Diagonalen.',
+    description:
+      'Selbst im tiefsten Dungeon sitzt die Sonnenbrille perfekt! Mit ihrem blauen Kristallstab blitzt sie quer über die Diagonalen.',
     weapon: 'Saphir-Kristallstab & Coolness-Aura',
     battleCry: 'Zu cool für dieses Gewölbe – aus dem Weg, Schätzchen!',
     captureQuotes: [
       'Mit Sonnenbrille im Dungeon abgeräumt! 😎💎',
       'Diagonal, elegant, unschlagbar!',
-      'Die Tante hat den Durchblick!'
+      'Die Tante hat den Durchblick!',
     ],
     accentColor: '#38bdf8',
-    avatarCrop: { col: 2, row: 0 },
     spritePath: '/assets/heroes/bishop.jpg',
     photoReference: '/assets/photos/family_bench.jpg',
+    superpower: {
+      id: 'sunglass_freeze',
+      name: 'Sonnenbrillen-Blendung',
+      icon: '😎',
+      shortDesc: 'Friert eine gegnerische Figur für 1 Zug ein',
+      fullDesc:
+        'Ein cooler Saphir-Blitz aus der Sonnenbrille friert die stärkste bewegliche gegnerische Figur (außer dem König) für 1 Runde komplett im Eis ein!',
+    },
   },
   r: {
     role: 'r',
@@ -128,37 +237,55 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
     familyTitle: 'Der Cousin (Festungs-Krieger)',
     customName: 'Cousin Tank',
     dungeonClass: 'Koloss der Steinernen Zitadelle',
-    description: 'Schwer gepanzert mit Zinnen-Krone und Panzerfäusten walzt er jede gerade Linie nieder, sodass die Steine wackeln.',
+    description:
+      'Schwer gepanzert mit Zinnen-Krone und Panzerfäusten walzt er jede gerade Linie nieder, sodass die Steine wackeln.',
     weapon: 'Titanen-Panzerfäuste & Erdbeben-Stampfer',
     battleCry: 'Peace-Zeichen war gestern – jetzt rollt die Festung!',
     captureQuotes: [
       'BÄM! Der Cousin räumt die Gerade frei! 🏰💥',
       'Unaufhaltsam wie eine Burgmauer!',
-      'Volle Kraft voraus – Turm-Power!'
+      'Volle Kraft voraus – Turm-Power!',
     ],
     accentColor: '#10b981',
-    avatarCrop: { col: 1, row: 1 },
     spritePath: '/assets/heroes/rook.jpg',
     photoReference: '/assets/photos/family_bench.jpg',
+    superpower: {
+      id: 'fortress_quake',
+      name: 'Festungs-Beben',
+      icon: '🏰',
+      shortDesc: 'Macht beide Türme für 1 Runde unverwundbar',
+      fullDesc:
+        'Cousin Tank schlägt mit den Panzerfäusten auf den Boden: Ein Steinwall schützt deine Türme für 1 Runde vor jedem Angriff!',
+    },
   },
   p: {
     role: 'p',
     chessName: 'Bauer',
-    familyTitle: 'Die Cousinen (Schatten-Waldläuferinnen)',
-    customName: 'Cousine Garde',
-    dungeonClass: 'Flinke Dungeon-Kundschafterin',
-    description: 'Unsere Cousinen bilden die unerschrockene Vorhut mit Zwillingsdolchen und Runengewand – und am Ende des Bretts werden sie zur Königin gekrönt!',
-    weapon: 'Zwillings-Runendolche',
-    battleCry: 'Schritt für Schritt bis zur Krone!',
+    familyTitle: 'Beide Cousinen (Schatten- & Runen-Garde)',
+    customName: 'Cousine Dolch',
+    secondaryCustomName: 'Cousine Rune',
+    dungeonClass: 'Flinke Dungeon-Kundschafterinnen (2 Skins!)',
+    description:
+      'Beide Cousinen von der Parkbank wechseln sich auf dem Schachbrett ab: 4× als Waldläuferin mit Zwillingsdolchen und 4× im edlen Hahnentritt-Runengewand mit Kopftuch!',
+    weapon: 'Zwillings-Runendolche & Arkan-Bogen',
+    battleCry: 'Schritt für Schritt gemeinsam bis zur Krone!',
     captureQuotes: [
       'Unterschätze niemals die Cousinen-Garde! 🗡️✨',
-      'Schnell, präzise und direkt ins Ziel!',
-      'Auf dem besten Weg zur Beförderung!'
+      'Doppelte Cousinen-Power schlägt zu!',
+      'Auf dem besten Weg zur Königinnen-Krönung!',
     ],
     accentColor: '#eab308',
-    avatarCrop: { col: 2, row: 1 },
     spritePath: '/assets/heroes/pawn.jpg',
+    secondarySpritePath: '/assets/heroes/pawn2.jpg',
     photoReference: '/assets/photos/family_bench.jpg',
+    superpower: {
+      id: 'cousin_sprint',
+      name: 'Cousinen-Teamgeist',
+      icon: '⚡',
+      shortDesc: 'Schützt die gesamte vordere Bauern-Reihe',
+      fullDesc:
+        'Beide Cousinen-Typen halten zusammen und errichten einen leuchtenden Runenschild für das ausgewählte Feld!',
+    },
   },
 };
 
