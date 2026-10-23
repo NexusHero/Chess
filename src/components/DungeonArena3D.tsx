@@ -385,11 +385,11 @@ const CameraDirector: React.FC<{
 
     let desiredPos: THREE.Vector3 | null = null;
     if (preset === 'top') {
-      desiredPos = new THREE.Vector3(0, 10.5, 0.01);
+      desiredPos = new THREE.Vector3(0, 9.2, 0.01);
     } else if (preset === 'table-white') {
-      desiredPos = new THREE.Vector3(0, 6.2, 6.8);
+      desiredPos = new THREE.Vector3(0, 5.4, 5.9);
     } else if (preset === 'table-black') {
-      desiredPos = new THREE.Vector3(0, 6.2, -6.8);
+      desiredPos = new THREE.Vector3(0, 5.4, -5.9);
     }
 
     if (desiredPos) {

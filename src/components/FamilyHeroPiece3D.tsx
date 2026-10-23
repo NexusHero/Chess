@@ -24,12 +24,12 @@ interface FamilyHeroPieceProps {
 }
 
 const ROLE_HEIGHT_SCALE: Record<PieceRole, number> = {
-  k: 1.52,
-  q: 1.46,
-  b: 1.32,
-  n: 1.24,
-  r: 1.34,
-  p: 1.12,
+  k: 2.15,
+  q: 2.05,
+  b: 1.88,
+  n: 1.78,
+  r: 1.9,
+  p: 1.62,
 };
 
 export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
@@ -279,8 +279,8 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       {/* Superpower Active Effect: Golden Paladin Shield Dome */}
       {isShielded && (
-        <mesh ref={shieldDomeRef} position={[0, 0.72, 0]}>
-          <icosahedronGeometry args={[0.62, 1]} />
+        <mesh ref={shieldDomeRef} position={[0, 0.95, 0]}>
+          <icosahedronGeometry args={[0.82, 1]} />
           <meshStandardMaterial
             color="#fbbf24"
             emissive="#f59e0b"
@@ -294,8 +294,8 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       {/* Superpower Active Effect: Aunt's Sapphire Ice Crystal Freeze */}
       {isFrozen && (
-        <mesh position={[0, 0.68, 0]}>
-          <octahedronGeometry args={[0.6, 0]} />
+        <mesh position={[0, 0.9, 0]}>
+          <octahedronGeometry args={[0.78, 0]} />
           <meshStandardMaterial
             color="#38bdf8"
             emissive="#0284c7"
@@ -349,7 +349,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       {/* 2. 3D Family Hero Miniature Standee */}
       <Billboard
-        position={[0, 0.21 + baseScale * 0.45, 0]}
+        position={[0, 0.22 + baseScale * 0.46, 0]}
         follow={true}
         lockX={false}
         lockY={false}
@@ -357,16 +357,16 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
       >
         <group ref={spriteRef} scale={[baseScale, baseScale, baseScale]}>
           <mesh position={[0, 0.02, -0.04]}>
-            <circleGeometry args={[0.38, 24]} />
+            <circleGeometry args={[0.42, 24]} />
             <meshBasicMaterial
               color={primaryTeamColor}
               transparent
-              opacity={isSelected ? 0.48 : hovered ? 0.32 : 0.16}
+              opacity={isSelected ? 0.52 : hovered ? 0.36 : 0.18}
             />
           </mesh>
 
           <mesh position={[0, 0, -0.02]}>
-            <planeGeometry args={[0.88, 0.96]} />
+            <planeGeometry args={[0.98, 1.08]} />
             <meshBasicMaterial
               map={texture}
               transparent
@@ -376,7 +376,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
           </mesh>
 
           <mesh castShadow>
-            <planeGeometry args={[0.85, 0.93]} />
+            <planeGeometry args={[0.95, 1.05]} />
             <meshStandardMaterial
               map={texture}
               transparent
@@ -402,7 +402,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         {/* Floating RPG Hero Badge */}
         {(hovered || isSelected || showNameplate || isShielded || isFrozen) && (
           <Html
-            position={[0, baseScale * 0.56, 0]}
+            position={[0, baseScale * 0.58, 0]}
             center
             distanceFactor={9}
             zIndexRange={[10, 0]}
