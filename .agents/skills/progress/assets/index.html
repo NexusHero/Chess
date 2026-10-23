@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Progress</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e2230; --border: #2a2f3a;
+    --text: #e6e8ee; --muted: #8a93a5; --accent: #5b8cff;
+    --todo: #e0a63c; --entscheidung: #4cc2ff; --fortschritt: #46c46a; --blocker: #e5534b;
+    --offen: #e0a63c; --erledigt: #46c46a; --blockiert: #e5534b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { padding: 18px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  header h1 { margin: 0; font-size: 18px; }
+  header h1 span { color: var(--accent); }
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 24px;
+             border-bottom: 1px solid var(--border); background: var(--panel); align-items: center; }
+  .filters select, .filters input, .filters button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 10px; font-size: 13px; }
+  .filters input { flex: 1; min-width: 180px; }
+  .filters button { cursor: pointer; background: var(--accent); border-color: var(--accent); color: #fff; }
+  .filters button:hover { opacity: .9; }
+  main { padding: 20px 24px; max-width: 1000px; margin: 0 auto; }
+  .entry { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+           padding: 12px 16px; margin-bottom: 12px; }
+  .entry .meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; text-transform: uppercase; }
+  .badge.todo { background: rgba(224,166,60,.15); color: var(--todo); }
+  .badge.entscheidung { background: rgba(76,194,255,.15); color: var(--entscheidung); }
+  .badge.fortschritt { background: rgba(70,196,106,.15); color: var(--fortschritt); }
+  .badge.blocker { background: rgba(229,83,75,.15); color: var(--blocker); }
+  .badge.offen { background: rgba(224,166,60,.15); color: var(--offen); }
+  .badge.erledigt { background: rgba(70,196,106,.15); color: var(--erledigt); }
+  .badge.blockiert { background: rgba(229,83,75,.15); color: var(--blockiert); }
+  .entry .crumb { color: var(--muted); font-size: 12px; }
+  .entry .summary { font-weight: 600; margin: 4px 0; }
+  .entry .text { color: var(--muted); font-size: 13px; white-space: pre-wrap; margin-top: 6px;
+                 border-top: 1px dashed var(--border); padding-top: 6px; }
+  .entry .id { color: var(--muted); font-size: 11px; }
+  .hint { color: var(--muted); font-style: italic; }
+  .count { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header><h1>progress<span>.db</span> <span class="count" id="count"></span></h1></header>
+
+<div class="filters">
+  <select id="repo" onchange="onRepo()"><option value="">Alle Repos</option></select>
+  <select id="context" onchange="load()"><option value="">Alle Kontexte</option></select>
+  <select id="type" onchange="load()">
+    <option value="">Alle Typen</option>
+    <option value="todo">todo</option>
+    <option value="entscheidung">entscheidung</option>
+    <option value="fortschritt">fortschritt</option>
+    <option value="blocker">blocker</option>
+  </select>
+  <select id="status" onchange="load()">
+    <option value="">Alle Status</option>
+    <option value="offen">offen</option>
+    <option value="erledigt">erledigt</option>
+    <option value="blockiert">blockiert</option>
+  </select>
+  <input id="q" placeholder="Suchen…" oninput="debounce(load, 300)">
+  <button onclick="load()">Aktualisieren</button>
+</div>
+
+<main id="list"></main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let debounceTimer;
+function debounce(fn, ms) { clearTimeout(debounceTimer); debounceTimer = setTimeout(fn, ms); }
+
+async function jfetch(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(url + ' -> ' + r.status);
+  return r.json();
+}
+
+async function initRepos() {
+  const repos = await jfetch('/api/repos');
+  const sel = $('repo');
+  repos.forEach(r => {
+    const o = document.createElement('option');
+    o.value = r.id; o.textContent = `${r.name} (${r.entry_count})`;
+    sel.appendChild(o);
+  });
+}
+
+async function onRepo() {
+  const repoId = $('repo').value;
+  const sel = $('context');
+  sel.innerHTML = '<option value="">Alle Kontexte</option>';
+  if (!repoId) { load(); return; }
+  const contexts = await jfetch('/api/contexts?repo_id=' + repoId);
+  contexts.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = `${c.name} [${c.status}]`;
+    sel.appendChild(o);
+  });
+  load();
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function load() {
+  const params = new URLSearchParams();
+  if ($('repo').value) params.set('repo_id', $('repo').value);
+  if ($('context').value) params.set('context_id', $('context').value);
+  if ($('type').value) params.set('type', $('type').value);
+  if ($('status').value) params.set('status', $('status').value);
+  if ($('q').value.trim()) params.set('q', $('q').value.trim());
+  const entries = await jfetch('/api/entries?' + params.toString());
+  $('count').textContent = entries.length ? `(${entries.length} Einträge)` : '';
+  const list = $('list');
+  if (!entries.length) {
+    list.innerHTML = '<p class="hint">Keine Einträge gefunden.</p>';
+    return;
+  }
+  list.innerHTML = entries.map(e => `
+    <div class="entry">
+      <div class="meta">
+        <span class="badge ${e.type}">${esc(e.type)}</span>
+        <span class="badge ${e.status}">${esc(e.status)}</span>
+        <span class="crumb">${esc(e.repo_name)} / ${esc(e.context_name)}</span>
+        <span class="id">#${e.id} · ${esc(e.created_at)}</span>
+      </div>
+      <div class="summary">${esc(e.summary)}</div>
+      ${e.text ? `<div class="text">${esc(e.text)}</div>` : ''}
+    </div>`).join('');
+}
+
+initRepos().then(load);
+</script>
+</body>
+</html>
