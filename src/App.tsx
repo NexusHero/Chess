@@ -50,9 +50,16 @@ import { soundFX } from './utils/sound';
 
 const STORAGE_KEY_HEROES = 'family_dungeon_chess_heroes_v2';
 const STORAGE_KEY_STARS = 'family_dungeon_chess_stars_v2';
+const STORAGE_KEY_SCOREBOARD = 'family_dungeon_chess_scoreboard_v2';
 const PEER_PREFIX = 'fdc-room-';
 
 export type GameMode = 'campaign' | 'local2p' | 'online' | 'treasure';
+
+export interface FamilyScoreboard {
+  goldWins: number;
+  purpleWins: number;
+  treasureWins: number;
+}
 
 export const App: React.FC = () => {
   // 1. Custom Family Hero Names, Voice Clips & Skins persisted in localStorage
@@ -83,7 +90,7 @@ export const App: React.FC = () => {
     }
   );
 
-  // 2. Stars/Crowns earned per Dungeon Level (1, 2, 3)
+  // 2. Stars/Crowns earned per Dungeon Level (1, 2, 3) + Eternal Family Scoreboard
   const [levelStars, setLevelStars] = useState<Record<number, number>>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_STARS);
@@ -93,6 +100,24 @@ export const App: React.FC = () => {
     }
     return { 1: 0, 2: 0, 3: 0 };
   });
+
+  const [scoreboard, setScoreboard] = useState<FamilyScoreboard>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_SCOREBOARD);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return { goldWins: 0, purpleWins: 0, treasureWins: 0 };
+  });
+
+  const [isScoreboardOpen, setIsScoreboardOpen] = useState<boolean>(false);
+  const [pendingPromotion, setPendingPromotion] = useState<{
+    from: Square;
+    to: Square;
+    color: 'w' | 'b';
+  } | null>(null);
+  const [promotedSquare, setPromotedSquare] = useState<Square | null>(null);
 
   const [currentLevelId, setCurrentLevelId] = useState<1 | 2 | 3>(1);
   const currentLevel = useMemo(
@@ -283,7 +308,12 @@ export const App: React.FC = () => {
 
   // Execute a validated move on the board
   const executeMove = useCallback(
-    (from: Square, to: Square, isRemoteMove = false): boolean => {
+    (
+      from: Square,
+      to: Square,
+      isRemoteMove = false,
+      promotionRole: 'q' | 'r' | 'b' | 'n' = 'q'
+    ): boolean => {
       const game = gameRef.current;
 
       // Special handling for Treasure Hunt Mode
@@ -304,6 +334,18 @@ export const App: React.FC = () => {
           if (nextTreasures.length === 0) {
             soundFX.playVictory();
             confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 } });
+            setScoreboard((prev) => {
+              const next = { ...prev, treasureWins: prev.treasureWins + 1 };
+              try {
+                localStorage.setItem(
+                  STORAGE_KEY_SCOREBOARD,
+                  JSON.stringify(next)
+                );
+              } catch {
+                // ignore
+              }
+              return next;
+            });
           }
         } else {
           soundFX.playMove();
@@ -315,10 +357,22 @@ export const App: React.FC = () => {
         const moveResult = game.move({
           from,
           to,
-          promotion: 'q',
+          promotion: promotionRole,
         });
 
         if (!moveResult) return false;
+
+        // Trigger Golden Coronation Spiral if this move was a Pawn Promotion!
+        if (moveResult.promotion) {
+          setPromotedSquare(to);
+          soundFX.playSuperpower();
+          showTemporaryBanner(
+            `👑 Krönung! Cousine verwandelt sich in ${heroes[promotionRole].customName} (${heroes[promotionRole].chessName})!`
+          );
+          setTimeout(() => {
+            setPromotedSquare((prev) => (prev === to ? null : prev));
+          }, 3500);
+        }
 
         // If Princess Mini's Double-Hop superpower was activated and this move doesn't give check:
         if (extraTurnActive && !game.inCheck()) {
@@ -353,6 +407,7 @@ export const App: React.FC = () => {
             type: 'move',
             from,
             to,
+            promotion: promotionRole,
             fen: game.fen(),
           });
         }
@@ -387,6 +442,21 @@ export const App: React.FC = () => {
             particleCount: 110,
             spread: 80,
             origin: { y: 0.6 },
+          });
+          setScoreboard((prev) => {
+            const next =
+              moveResult.color === 'w'
+                ? { ...prev, goldWins: prev.goldWins + 1 }
+                : { ...prev, purpleWins: prev.purpleWins + 1 };
+            try {
+              localStorage.setItem(
+                STORAGE_KEY_SCOREBOARD,
+                JSON.stringify(next)
+              );
+            } catch {
+              // ignore
+            }
+            return next;
           });
           if (gameMode === 'campaign' && moveResult.color === 'w') {
             setLevelStars((prev) => {
@@ -526,7 +596,12 @@ export const App: React.FC = () => {
       conn.on('data', (data: any) => {
         if (!data || typeof data !== 'object') return;
         if (data.type === 'move' && data.from && data.to) {
-          executeMove(data.from as Square, data.to as Square, true);
+          executeMove(
+            data.from as Square,
+            data.to as Square,
+            true,
+            data.promotion || 'q'
+          );
         } else if (data.type === 'emoji' && data.emoji) {
           soundFX.playSelect();
           triggerEmojiFloat(data.emoji, data.sender || 'Familie');
@@ -665,6 +740,25 @@ export const App: React.FC = () => {
     if (selectedSquare) {
       const isLegal = legalMoves.some((m) => m.to === sq);
       if (isLegal) {
+        // Check if this is a Cousin (Pawn) Promotion move reaching rank 8 or 1!
+        const movingPiece = game.get(selectedSquare);
+        const isPawnPromo =
+          gameMode !== 'treasure' &&
+          movingPiece &&
+          movingPiece.type === 'p' &&
+          ((movingPiece.color === 'w' && sq[1] === '8') ||
+            (movingPiece.color === 'b' && sq[1] === '1'));
+
+        if (isPawnPromo) {
+          soundFX.playSelect();
+          setPendingPromotion({
+            from: selectedSquare,
+            to: sq,
+            color: movingPiece.color,
+          });
+          return;
+        }
+
         executeMove(selectedSquare, sq);
         return;
       }
@@ -789,6 +883,16 @@ export const App: React.FC = () => {
               }
               obstacleSquares={
                 gameMode === 'treasure' ? currentQuest.obstacles : []
+              }
+              promotedSquare={promotedSquare}
+              winningTeamColor={
+                isTreasureComplete
+                  ? 'w'
+                  : isCheckmate
+                  ? turnColor === 'b'
+                    ? 'w'
+                    : 'b'
+                  : null
               }
               kidMode={kidMode}
               showAllNames={showAllNames}
@@ -931,6 +1035,20 @@ export const App: React.FC = () => {
               <span className="hidden md:inline">Online-Raum</span>
             </button>
           </div>
+
+          <button
+            onClick={() => setIsScoreboardOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/40 transition"
+            title="Ewige Familien-Bestenliste anzeigen"
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden xl:inline">Pokale</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-black text-[10px] font-black">
+              {scoreboard.goldWins +
+                scoreboard.purpleWins +
+                scoreboard.treasureWins}
+            </span>
+          </button>
 
           <button
             onClick={() => setIsHeroModalOpen(true)}
@@ -1157,6 +1275,160 @@ export const App: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* COUSIN PAWN PROMOTION (KRÖNUNGS-AUSWAHL) MODAL */}
+      {pendingPromotion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="max-w-lg w-full p-6 rounded-3xl bg-gradient-to-b from-amber-950/95 via-slate-900/95 to-purple-950/95 border-2 border-amber-400 shadow-[0_0_60px_rgba(251,191,36,0.65)] text-center space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400 text-amber-300 text-xs font-extrabold uppercase tracking-wider">
+              <Crown className="w-4 h-4" />
+              Bäuerinnen-Krönung am Ende des Bretts!
+            </div>
+            <h2 className="font-dungeon text-2xl font-black text-white">
+              Wen rufst du zur Verstärkung herbei?
+            </h2>
+            <p className="text-xs sm:text-sm text-amber-100/80">
+              Deine Cousine hat das letzte Feld ({pendingPromotion.to.toUpperCase()})
+              erreicht! Wähle, in welches Familienmitglied sie sich mit einer
+              goldenen Licht-Spirale verwandeln soll:
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+              {(['q', 'n', 'b', 'r'] as ('q' | 'n' | 'b' | 'r')[]).map(
+                (role) => {
+                  const h = heroes[role];
+                  return (
+                    <button
+                      key={role}
+                      onClick={() => {
+                        const { from, to } = pendingPromotion;
+                        setPendingPromotion(null);
+                        executeMove(from, to, false, role);
+                      }}
+                      className="group flex flex-col items-center p-3 rounded-2xl bg-black/60 hover:bg-amber-500/25 border-2 border-white/15 hover:border-amber-400 transition shadow-lg"
+                    >
+                      <img
+                        src={h.spritePath}
+                        alt={h.customName}
+                        className="w-16 h-16 rounded-xl object-cover border-2 border-amber-300 group-hover:scale-105 transition"
+                      />
+                      <span className="mt-2 font-dungeon text-xs font-extrabold text-amber-200">
+                        {h.customName}
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-400/90 uppercase">
+                        {h.chessName}
+                      </span>
+                    </button>
+                  );
+                }
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ETERNAL FAMILY SCOREBOARD MODAL */}
+      {isScoreboardOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="max-w-md w-full p-6 rounded-3xl bg-gradient-to-b from-slate-900 via-indigo-950 to-black border-2 border-amber-400/80 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-400 text-black flex items-center justify-center font-black">
+                  <Trophy className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="font-dungeon text-lg font-black text-amber-200">
+                    EWIGE FAMILIEN-BESTENLISTE
+                  </h2>
+                  <p className="text-xs text-amber-100/70">
+                    Alle Siege & gesammelten Schatzjagd-Missionen
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsScoreboardOpen(false)}
+                className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white"
+              >
+                Schließen
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5 pt-2">
+              <div className="p-3 rounded-2xl bg-amber-500/15 border border-amber-400/40 text-center">
+                <div className="text-2xl">☀️</div>
+                <div className="text-2xl font-black text-amber-300 mt-1">
+                  {scoreboard.goldWins}
+                </div>
+                <div className="text-[11px] font-bold text-amber-100/80">
+                  Team Gold Siege
+                </div>
+              </div>
+              <div className="p-3 rounded-2xl bg-purple-500/15 border border-purple-400/40 text-center">
+                <div className="text-2xl">🌙</div>
+                <div className="text-2xl font-black text-purple-300 mt-1">
+                  {scoreboard.purpleWins}
+                </div>
+                <div className="text-[11px] font-bold text-purple-100/80">
+                  Team Violett Siege
+                </div>
+              </div>
+              <div className="p-3 rounded-2xl bg-pink-500/15 border border-pink-400/40 text-center">
+                <div className="text-2xl">🎁</div>
+                <div className="text-2xl font-black text-pink-300 mt-1">
+                  {scoreboard.treasureWins}
+                </div>
+                <div className="text-[11px] font-bold text-pink-100/80">
+                  Schatz-Missionen
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-black/50 border border-white/10 space-y-2">
+              <div className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+                Dungeon-Kampagnen-Kronen
+              </div>
+              {DUNGEON_LEVELS.map((lvl) => (
+                <div
+                  key={lvl.id}
+                  className="flex items-center justify-between text-xs text-amber-100"
+                >
+                  <span>{lvl.name}</span>
+                  <span>
+                    {(levelStars[lvl.id] || 0) > 0
+                      ? '👑'.repeat(levelStars[lvl.id])
+                      : 'Noch offen'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center pt-1">
+              <button
+                onClick={() => {
+                  const empty = { goldWins: 0, purpleWins: 0, treasureWins: 0 };
+                  setScoreboard(empty);
+                  try {
+                    localStorage.setItem(
+                      STORAGE_KEY_SCOREBOARD,
+                      JSON.stringify(empty)
+                    );
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="text-xs text-red-300/70 hover:text-red-300 underline"
+              >
+                Zähler zurücksetzen
+              </button>
+              <button
+                onClick={() => setIsScoreboardOpen(false)}
+                className="px-4 py-2 rounded-xl bg-amber-500 text-black font-bold text-xs"
+              >
+                Weiterzocken!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* VICTORY / GAME OVER / TREASURE COMPLETE OVERLAY */}
       {(isCheckmate || isDraw || isTreasureComplete) && (

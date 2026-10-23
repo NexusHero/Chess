@@ -1,0 +1,23 @@
+{
+  "name": "Family Dungeon Chess 3D",
+  "short_name": "FamilyChess",
+  "description": "3D Familien-Dungeon-Schachspiel mit König Baba, Königin Anne, Prinzessin Mini, Tante Boss, Cousin Tank & beiden Cousinen!",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0714",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "./assets/heroes/king.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./assets/heroes/knight.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

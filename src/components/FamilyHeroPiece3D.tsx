@@ -8,6 +8,7 @@ interface FamilyHeroPieceProps {
   role: PieceRole;
   color: 'w' | 'b';
   targetPosition: [number, number, number];
+  fromPosition?: [number, number, number] | null; // Previous position for smooth hop-arc & dust burst
   heroConfig: FamilyHeroConfig;
   useSecondarySkin?: boolean; // For alternating the 2nd Cousin skin on Pawns
   isSelected: boolean;
@@ -15,6 +16,9 @@ interface FamilyHeroPieceProps {
   isShielded?: boolean; // Dungeon Superpower: Royal Shield
   isFrozen?: boolean; // Dungeon Superpower: Aunt's Sunglass Freeze
   isLastMoved: boolean;
+  isAttacking?: boolean; // Sword-lunge dash animation when capturing
+  isPromoted?: boolean; // Golden coronation spiral spin
+  isCelebrating?: boolean; // Victory dance hop at end of match
   showNameplate: boolean;
   onSelect: () => void;
 }
@@ -32,6 +36,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   role,
   color,
   targetPosition,
+  fromPosition = null,
   heroConfig,
   useSecondarySkin = false,
   isSelected,
@@ -39,6 +44,9 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   isShielded = false,
   isFrozen = false,
   isLastMoved,
+  isAttacking = false,
+  isPromoted = false,
+  isCelebrating = false,
   showNameplate,
   onSelect,
 }) => {
@@ -46,11 +54,17 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   const spriteRef = useRef<THREE.Group>(null);
   const auraRingRef = useRef<THREE.Mesh>(null);
   const shieldDomeRef = useRef<THREE.Mesh>(null);
+  const landingRingRef = useRef<THREE.Mesh>(null);
+  const checkAlarmRingRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
 
-  const currentPos = useRef(new THREE.Vector3(...targetPosition));
+  const currentPos = useRef(
+    new THREE.Vector3(...(fromPosition && isLastMoved ? fromPosition : targetPosition))
+  );
   const prevTarget = useRef(new THREE.Vector3(...targetPosition));
-  const jumpProgress = useRef(1);
+  const jumpProgress = useRef(fromPosition && isLastMoved ? 0 : 1);
+  const landingDustAlpha = useRef(fromPosition && isLastMoved ? 1 : 0);
+  const promotionSpin = useRef(isPromoted ? Math.PI * 4 : 0);
 
   // Pick primary or secondary cousin sprite path
   const activeSpriteJpg = useMemo(() => {
@@ -86,33 +100,92 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
     if (prevTarget.current.distanceTo(targetVec) > 0.05) {
       prevTarget.current.copy(targetVec);
       jumpProgress.current = 0;
+      landingDustAlpha.current = 1;
     }
 
     if (jumpProgress.current < 1) {
-      jumpProgress.current = Math.min(1, jumpProgress.current + delta * 3.2);
+      jumpProgress.current = Math.min(1, jumpProgress.current + delta * 2.6);
     }
 
-    currentPos.current.lerp(targetVec, Math.min(1, delta * 10));
+    currentPos.current.lerp(targetVec, Math.min(1, delta * 9.5));
 
-    // Parabolic hop arc (especially high for the Daughter / Knight!)
-    const arcMultiplier = role === 'n' ? 1.2 : 0.58;
+    // 1. Parabolic hop arc (extra high flip arc for Daughter / Knight + attacking lunge!)
+    const arcMultiplier = role === 'n' ? 1.45 : isAttacking ? 0.95 : 0.62;
     const hopHeight = Math.sin(jumpProgress.current * Math.PI) * arcMultiplier;
+
+    // 2. Selected hover lift
     const selectedLift = isSelected
       ? 0.25 + Math.sin(state.clock.elapsedTime * 5) * 0.06
       : 0;
 
+    // 3. Victory Dance Bounce at the end of a won game
+    const celebrationBounce = isCelebrating
+      ? Math.abs(Math.sin(state.clock.elapsedTime * 7.5 + targetPosition[0])) *
+        0.38
+      : 0;
+
+    // 4. King in Check tremble shake
+    const checkShakeX = isCheckThreatened
+      ? Math.sin(state.clock.elapsedTime * 36) * 0.045
+      : 0;
+    const checkShakeZ = isCheckThreatened
+      ? Math.cos(state.clock.elapsedTime * 32) * 0.045
+      : 0;
+
     groupRef.current.position.set(
-      currentPos.current.x,
-      currentPos.current.y + hopHeight + selectedLift,
-      currentPos.current.z
+      currentPos.current.x + checkShakeX,
+      currentPos.current.y + hopHeight + selectedLift + celebrationBounce,
+      currentPos.current.z + checkShakeZ
     );
+
+    // Slight forward tilt during hop/attack
+    const hopTilt =
+      jumpProgress.current < 1
+        ? Math.sin(jumpProgress.current * Math.PI) *
+          (isAttacking ? 0.28 : 0.14) *
+          (color === 'w' ? -1 : 1)
+        : 0;
+    groupRef.current.rotation.x = hopTilt;
+
+    // Promotion coronation spin
+    if (promotionSpin.current > 0) {
+      promotionSpin.current = Math.max(0, promotionSpin.current - delta * 8);
+      groupRef.current.rotation.y = promotionSpin.current;
+    } else if (isCelebrating) {
+      groupRef.current.rotation.y =
+        Math.sin(state.clock.elapsedTime * 4 + targetPosition[2]) * 0.25;
+    } else {
+      groupRef.current.rotation.y = 0;
+    }
+
+    // Landing dust shockwave ring expansion
+    if (landingRingRef.current && landingDustAlpha.current > 0) {
+      landingDustAlpha.current = Math.max(
+        0,
+        landingDustAlpha.current - delta * 1.6
+      );
+      const scale = 1 + (1 - landingDustAlpha.current) * 1.9;
+      landingRingRef.current.scale.set(scale, scale, 1);
+      const mat = landingRingRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = landingDustAlpha.current * 0.85;
+    }
+
+    // Pulsing red check alarm ring
+    if (checkAlarmRingRef.current && isCheckThreatened) {
+      const pulse = 1 + Math.sin(state.clock.elapsedTime * 10) * 0.22;
+      checkAlarmRingRef.current.scale.set(pulse, pulse, 1);
+    }
 
     if (spriteRef.current) {
       const t =
         state.clock.elapsedTime +
         targetPosition[0] * 0.7 +
         targetPosition[2] * 0.5;
-      const breath = isFrozen ? 1 : 1 + Math.sin(t * 2.6) * 0.026;
+      const breath = isFrozen
+        ? 1
+        : isCelebrating
+        ? 1 + Math.sin(t * 8) * 0.08
+        : 1 + Math.sin(t * 2.6) * 0.026;
       spriteRef.current.scale.set(baseScale, baseScale * breath, baseScale);
     }
 
@@ -236,11 +309,30 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       {/* Check Danger Pulsing Ring */}
       {isCheckThreatened && (
-        <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.38, 0.52, 24]} />
+        <mesh
+          ref={checkAlarmRingRef}
+          position={[0, 0.035, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <ringGeometry args={[0.38, 0.58, 28]} />
           <meshBasicMaterial color="#ef4444" side={THREE.DoubleSide} />
         </mesh>
       )}
+
+      {/* Landing Dust / Hop Shockwave Ring */}
+      <mesh
+        ref={landingRingRef}
+        position={[0, 0.03, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <ringGeometry args={[0.28, 0.42, 24]} />
+        <meshBasicMaterial
+          color={primaryTeamColor}
+          transparent
+          opacity={0}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
 
       {/* Last Move Subtle Highlight Ring */}
       {isLastMoved && !isSelected && (

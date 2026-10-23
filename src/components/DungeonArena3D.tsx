@@ -45,6 +45,8 @@ interface DungeonArena3DProps {
   frozenSquares: string[];
   treasureSquares?: string[];
   obstacleSquares?: string[];
+  promotedSquare?: Square | null;
+  winningTeamColor?: 'w' | 'b' | null;
   kidMode: boolean;
   showAllNames: boolean;
   cameraPreset: CameraPreset;
@@ -200,19 +202,21 @@ const LavaObstacle3D: React.FC<{ square: string }> = ({ square }) => {
   );
 };
 
-// Battle-Chess 3D Clash Duel Effect + Parachute Beam-Out + Speech Bubble
+// Battle-Chess 3D Clash Duel Effect + Ascending 3D Parachute Retreat + Speech Bubble
 const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
   effect,
 }) => {
   const ringRef = useRef<THREE.Mesh>(null);
   const beamRef = useRef<THREE.Mesh>(null);
+  const parachuteGroupRef = useRef<THREE.Group>(null);
+  const slashSwordRef = useRef<THREE.Group>(null);
   const pos = useMemo(() => squareToWorld(effect.square), [effect.square]);
 
   // Role-specific 3D weapon / magic projectile
   const isMagicAttacker =
     effect.attackerRole === 'q' || effect.attackerRole === 'b';
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (ringRef.current) {
       ringRef.current.scale.x += delta * 5.2;
       ringRef.current.scale.y += delta * 5.2;
@@ -223,6 +227,18 @@ const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
       beamRef.current.rotation.y += delta * 6;
       const mat = beamRef.current.material as THREE.MeshBasicMaterial;
       mat.opacity = Math.max(0, mat.opacity - delta * 0.45);
+    }
+    // 3D Parachute gently floating upward into the sky and swaying
+    if (parachuteGroupRef.current) {
+      parachuteGroupRef.current.position.y += delta * 1.15;
+      parachuteGroupRef.current.rotation.z =
+        Math.sin(state.clock.elapsedTime * 5) * 0.18;
+      parachuteGroupRef.current.rotation.y += delta * 1.2;
+    }
+    // 3D Sword / Arcane Slash swing animation
+    if (slashSwordRef.current) {
+      slashSwordRef.current.rotation.z += delta * 9.5;
+      slashSwordRef.current.rotation.y += delta * 4.5;
     }
   });
 
@@ -253,6 +269,47 @@ const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
         />
       </mesh>
 
+      {/* 3D Spinning Sword / Magic Energy Slash Ring */}
+      <group ref={slashSwordRef} position={[0, 0.75, 0]}>
+        <mesh rotation={[Math.PI / 3, 0, 0]}>
+          <torusGeometry args={[0.62, 0.045, 12, 32, Math.PI * 1.3]} />
+          <meshBasicMaterial color="#fde047" />
+        </mesh>
+      </group>
+
+      {/* 3D Ascending Parachute Carrying the Captured Piece Gently Away */}
+      <group ref={parachuteGroupRef} position={[0, 0.55, 0]}>
+        {/* Golden/Purple Parachute Canopy Dome */}
+        <mesh position={[0, 0.65, 0]} castShadow>
+          <sphereGeometry
+            args={[0.42, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]}
+          />
+          <meshStandardMaterial
+            color="#f59e0b"
+            emissive="#d97706"
+            emissiveIntensity={0.35}
+            side={THREE.DoubleSide}
+            roughness={0.3}
+          />
+        </mesh>
+        {/* Parachute Suspension Lines */}
+        {[-0.25, 0.25].map((rx, i) => (
+          <mesh
+            key={i}
+            position={[rx * 0.6, 0.35, 0]}
+            rotation={[0, 0, rx * 0.5]}
+          >
+            <cylinderGeometry args={[0.008, 0.008, 0.55, 6]} />
+            <meshBasicMaterial color="#fef3c7" />
+          </mesh>
+        ))}
+        {/* Little Hero Basket / Pedestal under the Parachute */}
+        <mesh position={[0, 0.08, 0]}>
+          <cylinderGeometry args={[0.18, 0.22, 0.14, 10]} />
+          <meshStandardMaterial color="#78350f" metalness={0.4} roughness={0.5} />
+        </mesh>
+      </group>
+
       <Sparkles
         count={60}
         scale={2.8}
@@ -262,7 +319,7 @@ const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
       />
 
       {/* Battle-Chess Mini-Duel Card & Parachute Retreat Animation */}
-      <Html position={[0, 2.35, 0]} center zIndexRange={[40, 0]}>
+      <Html position={[0, 2.55, 0]} center zIndexRange={[40, 0]}>
         <div className="pointer-events-none flex flex-col items-center gap-1.5 animate-bounce">
           {/* VS Clash Banner */}
           <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-amber-950/95 via-slate-900/95 to-purple-950/95 border-2 border-amber-400 shadow-[0_0_35px_rgba(251,191,36,0.75)]">
@@ -368,6 +425,8 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
   frozenSquares,
   treasureSquares = [],
   obstacleSquares = [],
+  promotedSquare = null,
+  winningTeamColor = null,
   kidMode,
   showAllNames,
   cameraPreset,
@@ -643,8 +702,20 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
           const heroCfg = heroes[p.type];
           const isThreatenedKing = p.type === 'k' && inCheckColor === p.color;
           const isLastMoved = lastMove?.to === p.square;
+          const fromWorldPos =
+            isLastMoved && lastMove?.from
+              ? (() => {
+                  const [fx, , fz] = squareToWorld(lastMove.from);
+                  return [fx, 0.06, fz] as [number, number, number];
+                })()
+              : null;
           // Alternate the two Cousin skins across odd/even files so BOTH Cousins from the bench photo are on the board!
           const useSecondCousin = p.type === 'p' && p.fileIndex % 2 === 1;
+          const isAttackingNow =
+            Boolean(captureEffect) && captureEffect?.square === p.square;
+          const isPromotedNow = promotedSquare === p.square;
+          const isCelebratingNow =
+            winningTeamColor !== null && p.color === winningTeamColor;
 
           return (
             <FamilyHeroPiece3D
@@ -652,6 +723,7 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
               role={p.type}
               color={p.color}
               targetPosition={[p.pos[0], 0.06, p.pos[2]]}
+              fromPosition={fromWorldPos}
               heroConfig={heroCfg}
               useSecondarySkin={useSecondCousin}
               isSelected={selectedSquare === p.square}
@@ -659,12 +731,29 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
               isShielded={shieldedSquares.includes(p.square)}
               isFrozen={frozenSquares.includes(p.square)}
               isLastMoved={isLastMoved}
+              isAttacking={isAttackingNow}
+              isPromoted={isPromotedNow}
+              isCelebrating={isCelebratingNow}
               showNameplate={showAllNames}
               onSelect={() => onSquareClick(p.square)}
             />
           );
         })}
       </group>
+
+      {/* Golden Coronation Spiral Aura when a Cousin promotes */}
+      {promotedSquare && (
+        <group position={squareToWorld(promotedSquare)}>
+          <Sparkles
+            count={80}
+            scale={[1.8, 3.2, 1.8]}
+            position={[0, 1.4, 0]}
+            size={8}
+            speed={4}
+            color="#fde047"
+          />
+        </group>
+      )}
 
       {/* Battle-Chess 3D Clash Effect & Speech Bubble */}
       {captureEffect && <BattleChessClash3D effect={captureEffect} />}

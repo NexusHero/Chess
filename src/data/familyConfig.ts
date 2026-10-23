@@ -1,3 +1,9 @@
+export function assetUrl(relativePath: string): string {
+  const base = import.meta.env.BASE_URL || '/';
+  const clean = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+  return `${base}${clean}`;
+}
+
 export type PieceRole = 'k' | 'q' | 'r' | 'b' | 'n' | 'p';
 
 export interface SuperpowerConfig {
@@ -139,8 +145,8 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
       'Platz da, hier kommt das Königsschwert!',
     ],
     accentColor: '#f59e0b',
-    spritePath: '/assets/heroes/king.jpg',
-    photoReference: '/assets/photos/king_queen.jpg',
+    spritePath: assetUrl('assets/heroes/king.jpg'),
+    photoReference: assetUrl('assets/photos/king_queen.jpg'),
     superpower: {
       id: 'royal_shield',
       name: 'Goldener Königsschild',
@@ -166,8 +172,8 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
       'Mit Licht und Magie vom Feld gefegt!',
     ],
     accentColor: '#c084fc',
-    spritePath: '/assets/heroes/queen.jpg',
-    photoReference: '/assets/photos/king_queen.jpg',
+    spritePath: assetUrl('assets/heroes/queen.jpg'),
+    photoReference: assetUrl('assets/photos/king_queen.jpg'),
     superpower: {
       id: 'queen_nova',
       name: 'Sternenlicht-Teleport',
@@ -193,8 +199,8 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
       'Kuckuck! Damit hast du nicht gerechnet!',
     ],
     accentColor: '#f43f5e',
-    spritePath: '/assets/heroes/knight.jpg',
-    photoReference: '/assets/photos/daughter.jpg',
+    spritePath: assetUrl('assets/heroes/knight.jpg'),
+    photoReference: assetUrl('assets/photos/daughter.jpg'),
     superpower: {
       id: 'double_hop',
       name: 'Wirbelwind-Doppelzug',
@@ -220,8 +226,8 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
       'Die Tante hat den Durchblick!',
     ],
     accentColor: '#38bdf8',
-    spritePath: '/assets/heroes/bishop.jpg',
-    photoReference: '/assets/photos/family_bench.jpg',
+    spritePath: assetUrl('assets/heroes/bishop.jpg'),
+    photoReference: assetUrl('assets/photos/family_bench.jpg'),
     superpower: {
       id: 'sunglass_freeze',
       name: 'Sonnenbrillen-Blendung',
@@ -247,8 +253,8 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
       'Volle Kraft voraus – Turm-Power!',
     ],
     accentColor: '#10b981',
-    spritePath: '/assets/heroes/rook.jpg',
-    photoReference: '/assets/photos/family_bench.jpg',
+    spritePath: assetUrl('assets/heroes/rook.jpg'),
+    photoReference: assetUrl('assets/photos/family_bench.jpg'),
     superpower: {
       id: 'fortress_quake',
       name: 'Festungs-Beben',
@@ -275,9 +281,9 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
       'Auf dem besten Weg zur Königinnen-Krönung!',
     ],
     accentColor: '#eab308',
-    spritePath: '/assets/heroes/pawn.jpg',
-    secondarySpritePath: '/assets/heroes/pawn2.jpg',
-    photoReference: '/assets/photos/family_bench.jpg',
+    spritePath: assetUrl('assets/heroes/pawn.jpg'),
+    secondarySpritePath: assetUrl('assets/heroes/pawn2.jpg'),
+    photoReference: assetUrl('assets/photos/family_bench.jpg'),
     superpower: {
       id: 'cousin_sprint',
       name: 'Cousinen-Teamgeist',
