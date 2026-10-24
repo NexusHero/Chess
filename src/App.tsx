@@ -46,7 +46,11 @@ import {
 } from './components/DungeonArena3D';
 import { FamilyHeroModal } from './components/FamilyHeroModal';
 import { OnlineRoomModal } from './components/OnlineRoomModal';
-import { chooseDungeonAIMove, findHelpfulHintMove } from './utils/chessAI';
+import {
+  chooseCrazyAraOrBrowserAIMove,
+  findHelpfulHintMove,
+  STORAGE_KEY_CRAZYARA_URL,
+} from './utils/chessAI';
 import { soundFX } from './utils/sound';
 
 const STORAGE_KEY_HEROES = 'family_dungeon_chess_heroes_v2';
@@ -543,7 +547,10 @@ export const App: React.FC = () => {
         }
       }
       setShieldedSquares(royalSq);
-      const best = findHelpfulHintMove(game.fen());
+      const best = findHelpfulHintMove(game.fen(), {
+        frozenSquares,
+        shieldedSquares: royalSq,
+      });
       if (best) {
         setHintMove({ from: best.from as Square, to: best.to as Square });
       }
@@ -692,7 +699,7 @@ export const App: React.FC = () => {
     }
   }, [handleJoinOnlineRoom]);
 
-  // AI Response Turn in 1-Player Campaign Mode
+  // AI Response Turn in 1-Player Campaign Mode (PeSTO + Quiescence Browser Engine with optional CrazyAra Bridge!)
   useEffect(() => {
     const game = gameRef.current;
     if (
@@ -701,29 +708,28 @@ export const App: React.FC = () => {
       game.turn() === 'b'
     ) {
       setIsAIThinking(true);
-      const timer = setTimeout(() => {
-        const aiMove = chooseDungeonAIMove(
+      let cancelled = false;
+      const timer = setTimeout(async () => {
+        const savedCrazyAraUrl =
+          localStorage.getItem(STORAGE_KEY_CRAZYARA_URL) || '';
+        const { move: aiMove } = await chooseCrazyAraOrBrowserAIMove(
           game.fen(),
           currentLevel.aiDepth,
-          currentLevel.aiRandomness
+          currentLevel.aiRandomness,
+          { frozenSquares, shieldedSquares },
+          savedCrazyAraUrl
         );
-        if (aiMove) {
-          // If AI tries to move a frozen piece or capture a shielded piece, pick an alternative
-          const allMoves = game.moves({ verbose: true }).filter(
-            (m) =>
-              !frozenSquares.includes(m.from) &&
-              !(m.captured && shieldedSquares.includes(m.to))
-          );
-          const chosen =
-            !frozenSquares.includes(aiMove.from) &&
-            !(aiMove.captured && shieldedSquares.includes(aiMove.to))
-              ? aiMove
-              : allMoves[0] || aiMove;
-          executeMove(chosen.from as Square, chosen.to as Square);
+        if (!cancelled && aiMove) {
+          executeMove(aiMove.from as Square, aiMove.to as Square);
         }
-        setIsAIThinking(false);
-      }, 650);
-      return () => clearTimeout(timer);
+        if (!cancelled) {
+          setIsAIThinking(false);
+        }
+      }, 420);
+      return () => {
+        cancelled = true;
+        clearTimeout(timer);
+      };
     }
   }, [fen, gameMode, currentLevel, executeMove, frozenSquares, shieldedSquares]);
 
@@ -822,7 +828,10 @@ export const App: React.FC = () => {
   const handleShowHint = () => {
     const game = gameRef.current;
     if (game.isGameOver() || isAIThinking) return;
-    const best = findHelpfulHintMove(game.fen());
+    const best = findHelpfulHintMove(game.fen(), {
+      frozenSquares,
+      shieldedSquares,
+    });
     if (best) {
       soundFX.playSelect();
       setSelectedSquare(best.from as Square);
