@@ -290,53 +290,72 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         document.body.style.cursor = 'auto';
       }}
     >
-      {/* 1. 3D Sculpted Multi-Tiered Carved Dungeon Rock / Stone Pedestal under the Hero's Feet */}
-      {/* Bottom Rough Hewn Flagstone Foundation */}
-      <mesh castShadow receiveShadow position={[0, 0.055, 0]} rotation={[0, 0.35, 0]}>
-        <cylinderGeometry args={[0.42, 0.47, 0.11, 7]} />
+      {/* 1. Ornate Square Carved Stone & Gold-Relief Pedestal (Matches Concept Art!) */}
+      {/* Bottom Chiseled Stone Plinth */}
+      <mesh castShadow receiveShadow position={[0, 0.05, 0]}>
+        <boxGeometry args={[0.78, 0.1, 0.78]} />
         <meshStandardMaterial
           color={stoneSlabDark}
-          roughness={0.92}
-          metalness={0.08}
-          flatShading
+          roughness={0.85}
+          metalness={0.15}
         />
       </mesh>
 
-      {/* Glowing Runic Magma/Crystal Seam Carved into the Stone */}
-      <mesh castShadow position={[0, 0.125, 0]}>
-        <cylinderGeometry args={[0.38, 0.4, 0.04, 12]} />
+      {/* Ornate Golden / Royal Purple Relief Body with Corner Columns */}
+      <mesh castShadow receiveShadow position={[0, 0.17, 0]}>
+        <boxGeometry args={[0.66, 0.16, 0.66]} />
         <meshStandardMaterial
-          color={primaryTeamColor}
-          roughness={0.25}
-          metalness={0.85}
-          emissive={primaryTeamColor}
-          emissiveIntensity={isSelected ? 0.95 : hovered ? 0.6 : 0.32}
+          color={isGoldTeam ? '#92622a' : '#4c1d95'}
+          roughness={0.35}
+          metalness={0.75}
+          emissive={isSelected || hovered ? primaryTeamColor : '#000000'}
+          emissiveIntensity={isSelected ? 0.55 : hovered ? 0.3 : 0.08}
         />
       </mesh>
 
-      {/* Upper Chiseled Stone Slab Platform */}
-      <mesh castShadow receiveShadow position={[0, 0.185, 0]} rotation={[0, 0.78, 0]}>
-        <cylinderGeometry args={[0.34, 0.39, 0.1, 6]} />
+      {/* 4 Glowing Rune Gems Embedded on the 4 Sides of the Square Pedestal */}
+      {[
+        [0, 0.17, 0.34],
+        [0, 0.17, -0.34],
+        [0.34, 0.17, 0],
+        [-0.34, 0.17, 0],
+      ].map((gPos, gIdx) => (
+        <mesh
+          key={`gem-${gIdx}`}
+          position={gPos as [number, number, number]}
+          scale={[0.07, 0.09, 0.07]}
+        >
+          <octahedronGeometry args={[1, 0]} />
+          <meshStandardMaterial
+            color={isGoldTeam ? '#38bdf8' : '#f59e0b'}
+            emissive={isGoldTeam ? '#0284c7' : '#d97706'}
+            emissiveIntensity={1.1}
+          />
+        </mesh>
+      ))}
+
+      {/* Upper Chiseled Stone Cap Slab */}
+      <mesh castShadow receiveShadow position={[0, 0.27, 0]}>
+        <boxGeometry args={[0.74, 0.06, 0.74]} />
         <meshStandardMaterial
-          color={stoneSlabMid}
-          roughness={0.88}
-          metalness={0.12}
-          flatShading
+          color={stoneSlabLight}
+          roughness={0.8}
+          metalness={0.15}
         />
       </mesh>
 
       {/* Rugged 3D Boulders & Cobblestone Rocks Clustered Directly Around the Hero's Feet */}
-      <group position={[0, 0.23, 0]}>
+      <group position={[0, 0.31, 0]}>
         {rockChunks.map((rc, idx) => (
           <mesh
             key={idx}
             position={[
-              Math.cos(rc.angle) * rc.dist,
+              Math.cos(rc.angle) * (rc.dist * 0.85),
               0.01,
-              Math.sin(rc.angle) * rc.dist,
+              Math.sin(rc.angle) * (rc.dist * 0.85),
             ]}
             rotation={[0.1, rc.rotY, rc.rotZ]}
-            scale={[rc.sx, rc.sy, rc.sz]}
+            scale={[rc.sx * 0.9, rc.sy * 0.9, rc.sz * 0.9]}
             castShadow
             receiveShadow
           >
@@ -351,8 +370,8 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         ))}
 
         {/* Central Flat Stepping Stone Directly Under the Boots/Feet */}
-        <mesh position={[0, 0.015, 0]} scale={[1, 0.32, 1]} receiveShadow>
-          <dodecahedronGeometry args={[0.28, 1]} />
+        <mesh position={[0, 0.015, 0]} scale={[1, 0.3, 1]} receiveShadow>
+          <dodecahedronGeometry args={[0.25, 1]} />
           <meshStandardMaterial
             color={stoneSlabLight}
             roughness={0.9}
@@ -364,13 +383,13 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       {/* Castle Stone Battlements around Rook base */}
       {role === 'r' && (
-        <group position={[0, 0.27, 0]}>
+        <group position={[0, 0.32, 0]}>
           {[0, 1, 2, 3, 4, 5].map((i) => {
             const angle = (i * Math.PI) / 3;
             return (
               <mesh
                 key={i}
-                position={[Math.cos(angle) * 0.33, 0, Math.sin(angle) * 0.33]}
+                position={[Math.cos(angle) * 0.31, 0, Math.sin(angle) * 0.31]}
                 castShadow
               >
                 <boxGeometry args={[0.1, 0.12, 0.1]} />
@@ -487,7 +506,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       {/* 2. 3D Family Hero Miniature Standee */}
       <Billboard
-        position={[0, 0.25 + baseScale * 0.45, 0]}
+        position={[0, 0.31 + baseScale * 0.45, 0]}
         follow={true}
         lockX={false}
         lockY={false}

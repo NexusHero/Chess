@@ -69,6 +69,80 @@ interface DungeonArena3DProps {
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
 
+// Ancient Dungeon Rune Glyphs matching the Pitch Concept Art!
+const RUNE_GLYPHS = ['ᚠ', 'ᚢ', 'ᚦ', 'ᚨ', 'ᚱ', 'ᚲ', 'ᚷ', 'ᚹ', 'ᛉ', 'ᛋ', 'ᛏ', 'ᛒ', 'ᛖ', 'ᛗ', 'ᛚ', 'ᛞ'];
+
+// Procedural 3D Carved Stone Flagstone Texture (with cracks, bevels & weathered stone grain)
+let cachedCarvedStoneTex: THREE.CanvasTexture | null = null;
+function getCarvedStoneTexture(): THREE.CanvasTexture {
+  if (cachedCarvedStoneTex) return cachedCarvedStoneTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+
+  // Base stone gradient
+  const grad = ctx.createRadialGradient(128, 128, 20, 128, 128, 165);
+  grad.addColorStop(0, '#f5f5f4');
+  grad.addColorStop(0.75, '#d6d3d1');
+  grad.addColorStop(1, '#78716c');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 256, 256);
+
+  // Chiseled outer bevel frame
+  ctx.strokeStyle = 'rgba(28, 25, 23, 0.75)';
+  ctx.lineWidth = 14;
+  ctx.strokeRect(7, 7, 242, 242);
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(16, 16, 224, 224);
+
+  // Inner carved rune border groove
+  ctx.strokeStyle = 'rgba(41, 37, 36, 0.45)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(32, 32, 192, 192);
+
+  // Weathering stone cracks
+  ctx.strokeStyle = 'rgba(28, 25, 23, 0.55)';
+  ctx.lineWidth = 2.5;
+  const cracks = [
+    [
+      [18, 45],
+      [52, 68],
+      [78, 62],
+    ],
+    [
+      [230, 180],
+      [195, 165],
+      [172, 190],
+    ],
+    [
+      [60, 235],
+      [85, 205],
+      [110, 215],
+    ],
+    [
+      [190, 22],
+      [168, 55],
+    ],
+  ];
+  cracks.forEach((path) => {
+    ctx.beginPath();
+    ctx.moveTo(path[0][0], path[0][1]);
+    for (let i = 1; i < path.length; i++) {
+      ctx.lineTo(path[i][0], path[i][1]);
+    }
+    ctx.stroke();
+  });
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  cachedCarvedStoneTex = tex;
+  return tex;
+}
+
 export function squareToWorld(sq: Square | string): [number, number, number] {
   const fileIndex = FILES.indexOf(sq[0]);
   const rankIndex = RANKS.indexOf(sq[1]);
@@ -584,9 +658,11 @@ const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
   );
 };
 
-// Spring-loaded Dungeon Stone Tile (depresses slightly when a piece lands or is selected)
+// Thick Chiseled Dungeon Stone Slab Tile with Glowing Carved Runes (Matches Concept Art!)
 const DungeonStoneTile3D: React.FC<{
   sq: Square;
+  rIdx: number;
+  cIdx: number;
   tileX: number;
   tileZ: number;
   tileColor: string;
@@ -602,6 +678,8 @@ const DungeonStoneTile3D: React.FC<{
   onSquareClick: (sq: Square) => void;
 }> = ({
   sq,
+  rIdx,
+  cIdx,
   tileX,
   tileZ,
   tileColor,
@@ -616,8 +694,30 @@ const DungeonStoneTile3D: React.FC<{
   runeGlowColor,
   onSquareClick,
 }) => {
-  const meshRef = useRef<THREE.Mesh>(null);
+  const groupRef = useRef<THREE.Group>(null);
   const pressDepth = useRef(0);
+  const stoneTex = useMemo(() => getCarvedStoneTexture(), []);
+
+  // Deterministic height micro-variation so the 64 flagstones look hand-laid
+  const slabHeightOffset = useMemo(
+    () => (((rIdx * 7 + cIdx * 13) % 5) - 2) * 0.008,
+    [rIdx, cIdx]
+  );
+
+  // Pick a glowing rune glyph for decorative middle/edge squares, just like the pitch art!
+  const runeInfo = useMemo(() => {
+    const hash = rIdx * 8 + cIdx;
+    const glyph = RUNE_GLYPHS[hash % RUNE_GLYPHS.length];
+    const isCyanRune = (rIdx + cIdx) % 2 === 0;
+    // Show glowing runes prominently on central dungeon ranks (3..6) or when highlighted
+    const showRune =
+      rIdx >= 2 && rIdx <= 5 ? (hash % 2 === 0 || isLight) : hash % 3 === 0;
+    return {
+      glyph,
+      color: isCyanRune ? '#38bdf8' : '#fb923c',
+      showRune,
+    };
+  }, [rIdx, cIdx, isLight]);
 
   useEffect(() => {
     if (isLastMoveTo || isSelected) {
@@ -626,33 +726,101 @@ const DungeonStoneTile3D: React.FC<{
   }, [isLastMoveTo, isSelected]);
 
   useFrame((_, delta) => {
-    if (!meshRef.current) return;
+    if (!groupRef.current) return;
     if (pressDepth.current > 0) {
       pressDepth.current = Math.max(0, pressDepth.current - delta * 2.5);
     }
-    const yOffset = -Math.sin(pressDepth.current * Math.PI) * 0.065;
-    meshRef.current.position.y = yOffset;
+    const yOffset =
+      slabHeightOffset - Math.sin(pressDepth.current * Math.PI) * 0.075;
+    groupRef.current.position.y = yOffset;
   });
 
   return (
     <group position={[tileX, 0, tileZ]}>
-      <mesh
-        ref={meshRef}
-        receiveShadow
-        onClick={(e) => {
-          e.stopPropagation();
-          onSquareClick(sq);
-        }}
-      >
-        <boxGeometry args={[0.95, 0.14, 0.95]} />
-        <meshStandardMaterial
-          color={tileColor}
-          roughness={isLight ? 0.65 : 0.8}
-          metalness={0.14}
-          emissive={emissiveColor}
-          emissiveIntensity={emissiveIntensity}
-        />
-      </mesh>
+      <group ref={groupRef}>
+        {/* Deep Stone Block Base (gives thick gap/grout lines between tiles) */}
+        <mesh
+          position={[0, -0.09, 0]}
+          receiveShadow
+          castShadow
+          onClick={(e) => {
+            e.stopPropagation();
+            onSquareClick(sq);
+          }}
+        >
+          <boxGeometry args={[0.91, 0.24, 0.91]} />
+          <meshStandardMaterial
+            map={stoneTex}
+            color={tileColor}
+            roughness={isLight ? 0.72 : 0.86}
+            metalness={0.15}
+            emissive={emissiveColor}
+            emissiveIntensity={emissiveIntensity}
+          />
+        </mesh>
+
+        {/* Chiseled Bevel Top Cap of the Flagstone */}
+        <mesh
+          position={[0, 0.04, 0]}
+          receiveShadow
+          onClick={(e) => {
+            e.stopPropagation();
+            onSquareClick(sq);
+          }}
+        >
+          <boxGeometry args={[0.85, 0.04, 0.85]} />
+          <meshStandardMaterial
+            map={stoneTex}
+            color={tileColor}
+            roughness={isLight ? 0.62 : 0.78}
+            metalness={0.18}
+            emissive={emissiveColor}
+            emissiveIntensity={emissiveIntensity * 1.15}
+          />
+        </mesh>
+
+        {/* Glowing Carved Rune Glyph on the Surface of the Stone Slab */}
+        {(runeInfo.showRune || isSelected || isLastMoveTo || isLegalTarget) && (
+          <Text
+            position={[0, 0.066, 0]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            fontSize={isSelected || isLegalTarget ? 0.46 : 0.38}
+            color={
+              isCaptureTarget
+                ? '#ef4444'
+                : isLegalTarget
+                ? '#34d399'
+                : isSelected
+                ? '#fde047'
+                : runeInfo.color
+            }
+            fillOpacity={
+              isSelected || isLegalTarget || isLastMoveTo ? 0.95 : 0.52
+            }
+            anchorX="center"
+            anchorY="middle"
+          >
+            {runeInfo.glyph}
+          </Text>
+        )}
+
+        {/* Outer Stepped Cliff Edge Inscriptions along the 4 Sides of the Board (Just like the Concept Art!) */}
+        {rIdx === 7 && (
+          <Text
+            position={[0, -0.06, 0.465]}
+            fontSize={0.13}
+            color="#38bdf8"
+            anchorX="center"
+            anchorY="middle"
+          >
+            {`${RUNE_GLYPHS[(cIdx * 3) % RUNE_GLYPHS.length]} ${FILES[
+              cIdx
+            ].toUpperCase()} ${
+              RUNE_GLYPHS[(cIdx * 3 + 1) % RUNE_GLYPHS.length]
+            }`}
+          </Text>
+        )}
+      </group>
 
       {/* Glowing Dungeon Rune Indicator for Legal Moves */}
       {isLegalTarget && (
@@ -665,26 +833,141 @@ const DungeonStoneTile3D: React.FC<{
         >
           {isCaptureTarget ? (
             <mesh rotation={[-Math.PI / 2, 0, 0]}>
-              <ringGeometry args={[0.33, 0.45, 24]} />
+              <ringGeometry args={[0.33, 0.44, 24]} />
               <meshBasicMaterial
                 color="#ef4444"
+                side={THREE.DoubleSide}
+                transparent
+                opacity={0.92}
+              />
+            </mesh>
+          ) : (
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.22, 0.32, 20]} />
+              <meshBasicMaterial
+                color={kidMode ? '#34d399' : runeGlowColor}
                 side={THREE.DoubleSide}
                 transparent
                 opacity={0.9}
               />
             </mesh>
-          ) : (
-            <mesh rotation={[-Math.PI / 2, 0, 0]}>
-              <circleGeometry args={[kidMode ? 0.22 : 0.16, 20]} />
-              <meshBasicMaterial
-                color={kidMode ? '#34d399' : runeGlowColor}
-                transparent
-                opacity={0.88}
-              />
-            </mesh>
           )}
         </group>
       )}
+    </group>
+  );
+};
+
+// Atmospheric Dungeon Props around the Board (Warm Metal Lanterns on the Stone Ledge + Floating Blue Mana Crystals + Mist)
+const DungeonBoardProps3D: React.FC<{ runeColor: string }> = ({
+  runeColor,
+}) => {
+  const crystalsRef = useRef<THREE.Group>(null);
+
+  useFrame((state, delta) => {
+    if (crystalsRef.current) {
+      crystalsRef.current.children.forEach((child, idx) => {
+        child.position.y =
+          1.35 + Math.sin(state.clock.elapsedTime * 2.2 + idx * 1.7) * 0.18;
+        child.rotation.y += delta * 1.1;
+      });
+    }
+  });
+
+  const lanternPositions: [number, number, number][] = [
+    [-4.35, 0.05, 1.8],
+    [4.35, 0.05, 1.8],
+    [-4.35, 0.05, -1.8],
+    [4.35, 0.05, -1.8],
+  ];
+
+  const crystalPositions: [number, number, number][] = [
+    [-4.65, 1.35, -3.4],
+    [4.65, 1.35, -3.4],
+    [-4.65, 1.35, 3.4],
+    [4.65, 1.35, 3.4],
+  ];
+
+  return (
+    <group>
+      {/* 4 Warm Glowing Dungeon Table Lanterns sitting on the outer stone ledge */}
+      {lanternPositions.map((pos, idx) => (
+        <group key={`lantern-${idx}`} position={pos}>
+          {/* Lantern Base */}
+          <mesh position={[0, 0.06, 0]} castShadow>
+            <boxGeometry args={[0.32, 0.08, 0.32]} />
+            <meshStandardMaterial
+              color="#292524"
+              roughness={0.5}
+              metalness={0.7}
+            />
+          </mesh>
+          {/* Glowing Warm Glass Core */}
+          <mesh position={[0, 0.26, 0]}>
+            <boxGeometry args={[0.22, 0.32, 0.22]} />
+            <meshStandardMaterial
+              color="#fef08a"
+              emissive="#f59e0b"
+              emissiveIntensity={1.5}
+            />
+          </mesh>
+          {/* Iron Cage Bars */}
+          <mesh position={[0, 0.26, 0]}>
+            <boxGeometry args={[0.25, 0.34, 0.25]} />
+            <meshStandardMaterial
+              color="#1c1917"
+              wireframe
+              metalness={0.8}
+              roughness={0.3}
+            />
+          </mesh>
+          {/* Pyramid Roof */}
+          <mesh position={[0, 0.49, 0]} rotation={[0, Math.PI / 4, 0]}>
+            <coneGeometry args={[0.26, 0.16, 4]} />
+            <meshStandardMaterial
+              color="#292524"
+              roughness={0.4}
+              metalness={0.75}
+            />
+          </mesh>
+          <pointLight
+            position={[0, 0.3, 0]}
+            color="#ff9500"
+            intensity={1.1}
+            distance={4.5}
+          />
+        </group>
+      ))}
+
+      {/* 4 Floating Glowing Blue Mana Crystals (Just like in the Pitch Concept Art!) */}
+      <group ref={crystalsRef}>
+        {crystalPositions.map((pos, idx) => (
+          <group key={`mana-crystal-${idx}`} position={pos}>
+            <mesh scale={[0.24, 0.46, 0.24]}>
+              <octahedronGeometry args={[1, 0]} />
+              <meshStandardMaterial
+                color="#38bdf8"
+                emissive="#0284c7"
+                emissiveIntensity={1.25}
+                roughness={0.1}
+                metalness={0.6}
+                transparent
+                opacity={0.9}
+              />
+            </mesh>
+            {/* Orbiting Mana Halo Ring */}
+            <mesh rotation={[Math.PI / 2.4, 0.3, 0]}>
+              <ringGeometry args={[0.32, 0.36, 20]} />
+              <meshBasicMaterial
+                color={runeColor || '#38bdf8'}
+                side={THREE.DoubleSide}
+                transparent
+                opacity={0.7}
+              />
+            </mesh>
+          </group>
+        ))}
+      </group>
     </group>
   );
 };
@@ -901,35 +1184,39 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
         color={level.theme.particleColor}
       />
 
-      {/* Dungeon Floor & Carved Stone Pedestal */}
-      <mesh position={[0, -0.55, 0]} receiveShadow>
-        <cylinderGeometry args={[7.6, 8.8, 0.7, 16]} />
+      {/* Stepped Ancient Stone Temple Altar & Chiseled Cliff Border (Matches Pitch Art!) */}
+      <mesh position={[0, -0.62, 0]} receiveShadow>
+        <boxGeometry args={[10.4, 0.65, 10.4]} />
         <meshStandardMaterial
           color={level.theme.floorColor}
-          roughness={0.9}
-          metalness={0.1}
+          roughness={0.92}
+          metalness={0.08}
         />
       </mesh>
 
-      {/* Outer Ornate Dungeon Chessboard Frame */}
-      <mesh position={[0, -0.14, 0]} receiveShadow castShadow>
-        <boxGeometry args={[8.9, 0.28, 8.9]} />
+      {/* Second Stepped Stone Ledge with Carved Rune Grooves */}
+      <mesh position={[0, -0.26, 0]} receiveShadow castShadow>
+        <boxGeometry args={[9.2, 0.32, 9.2]} />
         <meshStandardMaterial
-          color={level.theme.boardTrimColor}
-          roughness={0.45}
-          metalness={0.55}
+          color={level.theme.pillarColor}
+          roughness={0.82}
+          metalness={0.18}
         />
       </mesh>
 
-      {/* Glowing Runic Border Trim */}
-      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[5.75, 5.95, 4, 1, Math.PI / 4]} />
-        <meshBasicMaterial
-          color={level.theme.runeGlowColor}
-          transparent
-          opacity={0.45}
+      {/* Dark Magma / Mana Under-bed beneath the 64 Stone Slabs (visible in the gaps between tiles!) */}
+      <mesh position={[0, -0.11, 0]} receiveShadow>
+        <boxGeometry args={[8.18, 0.16, 8.18]} />
+        <meshStandardMaterial
+          color="#09070b"
+          emissive={level.theme.runeGlowColor}
+          emissiveIntensity={0.22}
+          roughness={0.9}
         />
       </mesh>
+
+      {/* Atmospheric Lanterns & Floating Blue Mana Crystals around the Board */}
+      <DungeonBoardProps3D runeColor={level.theme.runeGlowColor} />
 
       {/* 4 Corner Dungeon / Ramadan Fanous / Halloween Pumpkin Pillars */}
       <TorchPillar
@@ -1036,6 +1323,8 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
               <DungeonStoneTile3D
                 key={sq}
                 sq={sq}
+                rIdx={rIdx}
+                cIdx={cIdx}
                 tileX={tileX}
                 tileZ={tileZ}
                 tileColor={tileColor}

@@ -895,8 +895,8 @@ export const App: React.FC = () => {
                     : 'b'
                   : null
               }
-              capturedByGold={capturedByGold}
-              capturedByPurple={capturedByPurple}
+              capturedByGold={gameMode === 'treasure' ? [] : capturedByGold}
+              capturedByPurple={gameMode === 'treasure' ? [] : capturedByPurple}
               kidMode={kidMode}
               showAllNames={showAllNames}
               cameraPreset={cameraPreset}
