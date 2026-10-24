@@ -23,13 +23,23 @@ interface FamilyHeroPieceProps {
   onSelect: () => void;
 }
 
+// Clear Art-Director Size & Pedestal Hierarchy so Front & Back Ranks never occlude each other!
 const ROLE_HEIGHT_SCALE: Record<PieceRole, number> = {
-  k: 1.78,
-  q: 1.72,
-  b: 1.56,
-  n: 1.48,
-  r: 1.58,
-  p: 1.34,
+  k: 1.54,
+  q: 1.48,
+  b: 1.34,
+  r: 1.35,
+  n: 1.28,
+  p: 1.12,
+};
+
+const ROLE_PEDESTAL_HEIGHT: Record<PieceRole, number> = {
+  k: 0.24,
+  q: 0.22,
+  b: 0.16,
+  r: 0.16,
+  n: 0.15,
+  p: 0.1,
 };
 
 export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
@@ -56,7 +66,6 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   const shieldDomeRef = useRef<THREE.Mesh>(null);
   const landingRingRef = useRef<THREE.Mesh>(null);
   const checkAlarmRingRef = useRef<THREE.Mesh>(null);
-  const floatingEmblemRef = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
 
   const currentPos = useRef(
@@ -98,10 +107,15 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   const isGoldTeam = color === 'w';
   const primaryTeamColor = isGoldTeam ? '#fbbf24' : '#a855f7';
   const secondaryTeamColor = isGoldTeam ? '#fef3c7' : '#e9d5ff';
-  const stoneSlabDark = isGoldTeam ? '#574c41' : '#332b42';
-  const stoneSlabMid = isGoldTeam ? '#786b5d' : '#4a3e5e';
-  const stoneSlabLight = isGoldTeam ? '#9c8d7c' : '#65567d';
-  const baseScale = ROLE_HEIGHT_SCALE[role] || 1.7;
+  // Distinct warm sandstone-gold vs deep royal obsidian-violet stone pedestals
+  const stoneSlabDark = isGoldTeam ? '#5c4938' : '#2a223a';
+  const stoneSlabMid = isGoldTeam ? '#856d56' : '#43365c';
+  const stoneSlabLight = isGoldTeam ? '#ab9176' : '#635185';
+  const reliefBodyColor = isGoldTeam ? '#b47b32' : '#5b21b6';
+  const baseScale = ROLE_HEIGHT_SCALE[role] || 1.3;
+  const bodyHeight = ROLE_PEDESTAL_HEIGHT[role] || 0.15;
+  const capY = 0.08 + bodyHeight + 0.025;
+  const topY = capY + 0.03;
 
   // Deterministic rugged rock chunks around the hero's feet
   const rockChunks = useMemo(() => {
@@ -118,10 +132,10 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
     }[] = [];
     for (let i = 0; i < count; i++) {
       const angle = (i * Math.PI * 2) / count + (i % 2 === 0 ? 0.12 : -0.08);
-      const dist = 0.27 + (i % 3) * 0.035;
-      const sx = 0.13 + (i % 2) * 0.04;
-      const sy = 0.09 + ((i + 1) % 3) * 0.035;
-      const sz = 0.12 + (i % 3) * 0.03;
+      const dist = 0.24 + (i % 3) * 0.03;
+      const sx = 0.11 + (i % 2) * 0.035;
+      const sy = 0.075 + ((i + 1) % 3) * 0.028;
+      const sz = 0.1 + (i % 3) * 0.025;
       chunks.push({
         angle,
         dist,
@@ -158,7 +172,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
     // 2. Selected hover lift
     const selectedLift = isSelected
-      ? 0.25 + Math.sin(state.clock.elapsedTime * 5) * 0.06
+      ? 0.22 + Math.sin(state.clock.elapsedTime * 5) * 0.05
       : 0;
 
     // 3. Victory Dance Bounce at the end of a won game
@@ -228,7 +242,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         ? 1
         : isCelebrating
         ? 1 + Math.sin(t * 8) * 0.08
-        : 1 + Math.sin(t * 2.6) * 0.026;
+        : 1 + Math.sin(t * 2.6) * 0.024;
 
       // Pixar-style Squash & Stretch during hop, landing, and selection pop!
       if (selectBounce.current > 0) {
@@ -258,12 +272,6 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
       );
     }
 
-    if (floatingEmblemRef.current) {
-      floatingEmblemRef.current.rotation.y += delta * 1.8;
-      floatingEmblemRef.current.position.y =
-        baseScale * 0.56 + Math.sin(state.clock.elapsedTime * 3.2) * 0.05;
-    }
-
     if (auraRingRef.current) {
       auraRingRef.current.rotation.z += delta * (isSelected ? 2.4 : 0.8);
     }
@@ -290,10 +298,21 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         document.body.style.cursor = 'auto';
       }}
     >
-      {/* 1. Ornate Square Carved Stone & Gold-Relief Pedestal (Matches Concept Art!) */}
+      {/* 1. Grounded Team Identification Ring on the Floor (Replaces the muddy background bubble!) */}
+      <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.36, 0.43, 32]} />
+        <meshBasicMaterial
+          color={primaryTeamColor}
+          side={THREE.DoubleSide}
+          transparent
+          opacity={isSelected ? 0.95 : hovered ? 0.8 : 0.52}
+        />
+      </mesh>
+
+      {/* 2. Stepped Ornate Square Carved Stone & Gold/Purple-Relief Pedestal (Matches Concept Art!) */}
       {/* Bottom Chiseled Stone Plinth */}
-      <mesh castShadow receiveShadow position={[0, 0.05, 0]}>
-        <boxGeometry args={[0.78, 0.1, 0.78]} />
+      <mesh castShadow receiveShadow position={[0, 0.04, 0]}>
+        <boxGeometry args={[0.74, 0.08, 0.74]} />
         <meshStandardMaterial
           color={stoneSlabDark}
           roughness={0.85}
@@ -301,51 +320,55 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         />
       </mesh>
 
-      {/* Ornate Golden / Royal Purple Relief Body with Corner Columns */}
-      <mesh castShadow receiveShadow position={[0, 0.17, 0]}>
-        <boxGeometry args={[0.66, 0.16, 0.66]} />
+      {/* Ornate Golden / Royal Purple Relief Body (Height tiered by piece rank!) */}
+      <mesh
+        castShadow
+        receiveShadow
+        position={[0, 0.08 + bodyHeight / 2, 0]}
+      >
+        <boxGeometry args={[0.62, bodyHeight, 0.62]} />
         <meshStandardMaterial
-          color={isGoldTeam ? '#92622a' : '#4c1d95'}
+          color={reliefBodyColor}
           roughness={0.35}
-          metalness={0.75}
+          metalness={0.78}
           emissive={isSelected || hovered ? primaryTeamColor : '#000000'}
-          emissiveIntensity={isSelected ? 0.55 : hovered ? 0.3 : 0.08}
+          emissiveIntensity={isSelected ? 0.55 : hovered ? 0.3 : 0.06}
         />
       </mesh>
 
       {/* 4 Glowing Rune Gems Embedded on the 4 Sides of the Square Pedestal */}
       {[
-        [0, 0.17, 0.34],
-        [0, 0.17, -0.34],
-        [0.34, 0.17, 0],
-        [-0.34, 0.17, 0],
+        [0, 0.08 + bodyHeight / 2, 0.32],
+        [0, 0.08 + bodyHeight / 2, -0.32],
+        [0.32, 0.08 + bodyHeight / 2, 0],
+        [-0.32, 0.08 + bodyHeight / 2, 0],
       ].map((gPos, gIdx) => (
         <mesh
           key={`gem-${gIdx}`}
           position={gPos as [number, number, number]}
-          scale={[0.07, 0.09, 0.07]}
+          scale={[0.06, 0.08, 0.06]}
         >
           <octahedronGeometry args={[1, 0]} />
           <meshStandardMaterial
             color={isGoldTeam ? '#38bdf8' : '#f59e0b'}
             emissive={isGoldTeam ? '#0284c7' : '#d97706'}
-            emissiveIntensity={1.1}
+            emissiveIntensity={1.2}
           />
         </mesh>
       ))}
 
       {/* Upper Chiseled Stone Cap Slab */}
-      <mesh castShadow receiveShadow position={[0, 0.27, 0]}>
-        <boxGeometry args={[0.74, 0.06, 0.74]} />
+      <mesh castShadow receiveShadow position={[0, capY, 0]}>
+        <boxGeometry args={[0.68, 0.05, 0.68]} />
         <meshStandardMaterial
           color={stoneSlabLight}
-          roughness={0.8}
-          metalness={0.15}
+          roughness={0.78}
+          metalness={0.18}
         />
       </mesh>
 
       {/* Rugged 3D Boulders & Cobblestone Rocks Clustered Directly Around the Hero's Feet */}
-      <group position={[0, 0.31, 0]}>
+      <group position={[0, topY, 0]}>
         {rockChunks.map((rc, idx) => (
           <mesh
             key={idx}
@@ -355,7 +378,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
               Math.sin(rc.angle) * (rc.dist * 0.85),
             ]}
             rotation={[0.1, rc.rotY, rc.rotZ]}
-            scale={[rc.sx * 0.9, rc.sy * 0.9, rc.sz * 0.9]}
+            scale={[rc.sx * 0.88, rc.sy * 0.88, rc.sz * 0.88]}
             castShadow
             receiveShadow
           >
@@ -370,8 +393,8 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         ))}
 
         {/* Central Flat Stepping Stone Directly Under the Boots/Feet */}
-        <mesh position={[0, 0.015, 0]} scale={[1, 0.3, 1]} receiveShadow>
-          <dodecahedronGeometry args={[0.25, 1]} />
+        <mesh position={[0, 0.012, 0]} scale={[1, 0.28, 1]} receiveShadow>
+          <dodecahedronGeometry args={[0.23, 1]} />
           <meshStandardMaterial
             color={stoneSlabLight}
             roughness={0.9}
@@ -383,16 +406,16 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       {/* Castle Stone Battlements around Rook base */}
       {role === 'r' && (
-        <group position={[0, 0.32, 0]}>
+        <group position={[0, topY + 0.01, 0]}>
           {[0, 1, 2, 3, 4, 5].map((i) => {
             const angle = (i * Math.PI) / 3;
             return (
               <mesh
                 key={i}
-                position={[Math.cos(angle) * 0.31, 0, Math.sin(angle) * 0.31]}
+                position={[Math.cos(angle) * 0.28, 0, Math.sin(angle) * 0.28]}
                 castShadow
               >
-                <boxGeometry args={[0.1, 0.12, 0.1]} />
+                <boxGeometry args={[0.09, 0.1, 0.09]} />
                 <meshStandardMaterial
                   color={stoneSlabLight}
                   metalness={0.25}
@@ -405,14 +428,14 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         </group>
       )}
 
-      {/* Floating Royal Halo Ring at the base of King & Queen */}
+      {/* Subtle Royal Halo Ring at the pedestal top for King & Queen */}
       {(role === 'k' || role === 'q') && (
         <mesh
           ref={auraRingRef}
-          position={[0, 0.23, 0]}
+          position={[0, topY + 0.005, 0]}
           rotation={[-Math.PI / 2, 0, 0]}
         >
-          <ringGeometry args={[0.36, 0.44, 6]} />
+          <ringGeometry args={[0.31, 0.37, 6]} />
           <meshBasicMaterial
             color={role === 'k' ? '#fbbf24' : '#e879f9'}
             side={THREE.DoubleSide}
@@ -424,8 +447,8 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       {/* Superpower Active Effect: Golden Paladin Shield Dome */}
       {isShielded && (
-        <mesh ref={shieldDomeRef} position={[0, 0.95, 0]}>
-          <icosahedronGeometry args={[0.82, 1]} />
+        <mesh ref={shieldDomeRef} position={[0, 0.9, 0]}>
+          <icosahedronGeometry args={[0.78, 1]} />
           <meshStandardMaterial
             color="#fbbf24"
             emissive="#f59e0b"
@@ -439,8 +462,8 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       {/* Superpower Active Effect: Aunt's Sapphire Ice Crystal Freeze */}
       {isFrozen && (
-        <mesh position={[0, 0.9, 0]}>
-          <octahedronGeometry args={[0.78, 0]} />
+        <mesh position={[0, 0.85, 0]}>
+          <octahedronGeometry args={[0.74, 0]} />
           <meshStandardMaterial
             color="#38bdf8"
             emissive="#0284c7"
@@ -459,7 +482,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
           position={[0, 0.035, 0]}
           rotation={[-Math.PI / 2, 0, 0]}
         >
-          <ringGeometry args={[0.38, 0.58, 28]} />
+          <ringGeometry args={[0.38, 0.56, 28]} />
           <meshBasicMaterial color="#ef4444" side={THREE.DoubleSide} />
         </mesh>
       )}
@@ -481,12 +504,12 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       {/* Last Move Subtle Highlight Ring */}
       {isLastMoved && !isSelected && (
-        <mesh position={[0, 0.025, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.39, 0.46, 24]} />
+        <mesh position={[0, 0.022, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.38, 0.45, 24]} />
           <meshBasicMaterial
             color={secondaryTeamColor}
             transparent
-            opacity={0.65}
+            opacity={0.7}
             side={THREE.DoubleSide}
           />
         </mesh>
@@ -504,101 +527,46 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         />
       )}
 
-      {/* 2. 3D Family Hero Miniature Standee */}
+      {/* 3. Crisp, Silhouette-Clean 3D Family Hero Miniature Standee (NO muddy background disc, NO floating primitive hats!) */}
       <Billboard
-        position={[0, 0.31 + baseScale * 0.45, 0]}
+        position={[0, topY + baseScale * 0.45, 0]}
         follow={true}
         lockX={false}
         lockY={false}
         lockZ={false}
       >
-        {/* Floating 3D Role Emblem above the Hero (Crown for King, Star Orb for Queen, Diamond for Aunt, etc.) */}
-        <group ref={floatingEmblemRef} position={[0, baseScale * 0.56, 0]}>
-          {role === 'k' && (
-            <mesh rotation={[Math.PI / 2, 0, 0]}>
-              <torusGeometry args={[0.13, 0.035, 8, 6]} />
-              <meshStandardMaterial
-                color="#fbbf24"
-                emissive="#f59e0b"
-                emissiveIntensity={0.7}
-                metalness={0.9}
-                roughness={0.15}
-              />
-            </mesh>
-          )}
-          {role === 'q' && (
-            <mesh>
-              <octahedronGeometry args={[0.13, 0]} />
-              <meshStandardMaterial
-                color="#e879f9"
-                emissive="#c084fc"
-                emissiveIntensity={0.85}
-                metalness={0.8}
-                roughness={0.1}
-              />
-            </mesh>
-          )}
-          {role === 'b' && (
-            <mesh scale={[0.8, 1.35, 0.8]}>
-              <octahedronGeometry args={[0.11, 0]} />
-              <meshStandardMaterial
-                color="#38bdf8"
-                emissive="#0284c7"
-                emissiveIntensity={0.8}
-              />
-            </mesh>
-          )}
-          {role === 'n' && (
-            <mesh>
-              <dodecahedronGeometry args={[0.1, 0]} />
-              <meshStandardMaterial
-                color="#fb7185"
-                emissive="#f43f5e"
-                emissiveIntensity={0.75}
-              />
-            </mesh>
-          )}
-        </group>
-
         <group ref={spriteRef} scale={[baseScale, baseScale, baseScale]}>
-          <mesh position={[0, 0.02, -0.04]}>
-            <circleGeometry args={[0.42, 24]} />
-            <meshBasicMaterial
-              color={primaryTeamColor}
-              transparent
-              opacity={isSelected ? 0.52 : hovered ? 0.36 : 0.18}
-            />
-          </mesh>
-
-          <mesh position={[0, 0, -0.02]}>
-            <planeGeometry args={[0.98, 1.08]} />
+          {/* Crisp Rim-Light Silhouette Edge (Only visible along the character's exact alpha contour!) */}
+          <mesh position={[0, 0, -0.018]}>
+            <planeGeometry args={[0.97, 1.07]} />
             <meshBasicMaterial
               map={texture}
               transparent
-              alphaTest={0.12}
-              color={primaryTeamColor}
+              alphaTest={0.18}
+              color={isSelected ? '#ffffff' : primaryTeamColor}
             />
           </mesh>
 
+          {/* Main High-Contrast Character Cutout */}
           <mesh castShadow>
-            <planeGeometry args={[0.95, 1.05]} />
+            <planeGeometry args={[0.94, 1.04]} />
             <meshStandardMaterial
               map={texture}
               transparent
-              alphaTest={0.08}
+              alphaTest={0.12}
               roughness={0.35}
-              metalness={0.1}
+              metalness={0.08}
               emissive={
                 isFrozen
                   ? '#0284c7'
                   : isShielded
                   ? '#b45309'
-                  : isGoldTeam
-                  ? '#451a03'
-                  : '#2e1065'
+                  : isSelected
+                  ? primaryTeamColor
+                  : '#000000'
               }
               emissiveIntensity={
-                isFrozen || isShielded ? 0.45 : isGoldTeam ? 0.08 : 0.22
+                isFrozen || isShielded ? 0.45 : isSelected ? 0.18 : 0
               }
             />
           </mesh>
@@ -607,7 +575,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         {/* Floating RPG Hero Badge */}
         {(hovered || isSelected || showNameplate || isShielded || isFrozen) && (
           <Html
-            position={[0, baseScale * 0.54, 0]}
+            position={[0, baseScale * 0.55, 0]}
             center
             zIndexRange={[10, 0]}
           >

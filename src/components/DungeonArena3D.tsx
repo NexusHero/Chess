@@ -72,6 +72,26 @@ const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
 // Ancient Dungeon Rune Glyphs matching the Pitch Concept Art!
 const RUNE_GLYPHS = ['ᚠ', 'ᚢ', 'ᚦ', 'ᚨ', 'ᚱ', 'ᚲ', 'ᚷ', 'ᚹ', 'ᛉ', 'ᛋ', 'ᛏ', 'ᛒ', 'ᛖ', 'ᛗ', 'ᛚ', 'ᛞ'];
 
+// Procedural Radial Glow Texture for Additive Bloom Halos around Runes, Lanterns & Mana Crystals
+let cachedGlowHaloTex: THREE.CanvasTexture | null = null;
+function getGlowHaloTexture(): THREE.CanvasTexture {
+  if (cachedGlowHaloTex) return cachedGlowHaloTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  const grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+  grad.addColorStop(0.35, 'rgba(255, 255, 255, 0.55)');
+  grad.addColorStop(0.7, 'rgba(255, 255, 255, 0.14)');
+  grad.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(canvas);
+  cachedGlowHaloTex = tex;
+  return tex;
+}
+
 // Procedural 3D Carved Stone Flagstone Texture (with cracks, bevels & weathered stone grain)
 let cachedCarvedStoneTex: THREE.CanvasTexture | null = null;
 function getCarvedStoneTexture(): THREE.CanvasTexture {
@@ -697,6 +717,7 @@ const DungeonStoneTile3D: React.FC<{
   const groupRef = useRef<THREE.Group>(null);
   const pressDepth = useRef(0);
   const stoneTex = useMemo(() => getCarvedStoneTexture(), []);
+  const glowTex = useMemo(() => getGlowHaloTexture(), []);
 
   // Deterministic height micro-variation so the 64 flagstones look hand-laid
   const slabHeightOffset = useMemo(
@@ -704,20 +725,25 @@ const DungeonStoneTile3D: React.FC<{
     [rIdx, cIdx]
   );
 
-  // Pick a glowing rune glyph for decorative middle/edge squares, just like the pitch art!
+  // Art-Director 70/30 Rule: Selective Glowing Power Runes so the board stays readable & magical!
   const runeInfo = useMemo(() => {
     const hash = rIdx * 8 + cIdx;
     const glyph = RUNE_GLYPHS[hash % RUNE_GLYPHS.length];
     const isCyanRune = (rIdx + cIdx) % 2 === 0;
-    // Show glowing runes prominently on central dungeon ranks (3..6) or when highlighted
+    const isCenterSanctum =
+      (rIdx === 3 || rIdx === 4) && (cIdx === 3 || cIdx === 4);
+    const isFrontOrBackEdgeRune =
+      (rIdx === 5 || rIdx === 2) && (cIdx === 1 || cIdx === 4 || cIdx === 6);
+    const isFrontBorderShowcase =
+      rIdx === 7 && (cIdx === 0 || cIdx === 2 || cIdx === 5 || cIdx === 7);
     const showRune =
-      rIdx >= 2 && rIdx <= 5 ? (hash % 2 === 0 || isLight) : hash % 3 === 0;
+      isCenterSanctum || isFrontOrBackEdgeRune || isFrontBorderShowcase;
     return {
       glyph,
       color: isCyanRune ? '#38bdf8' : '#fb923c',
       showRune,
     };
-  }, [rIdx, cIdx, isLight]);
+  }, [rIdx, cIdx]);
 
   useEffect(() => {
     if (isLastMoveTo || isSelected) {
@@ -735,10 +761,18 @@ const DungeonStoneTile3D: React.FC<{
     groupRef.current.position.y = yOffset;
   });
 
+  const activeRuneColor = isCaptureTarget
+    ? '#ef4444'
+    : isLegalTarget
+    ? '#34d399'
+    : isSelected
+    ? '#fde047'
+    : runeInfo.color;
+
   return (
     <group position={[tileX, 0, tileZ]}>
       <group ref={groupRef}>
-        {/* Deep Stone Block Base (gives thick gap/grout lines between tiles) */}
+        {/* Deep Stone Block Base (gives thick dark shadow joints between tiles) */}
         <mesh
           position={[0, -0.09, 0]}
           receiveShadow
@@ -748,7 +782,7 @@ const DungeonStoneTile3D: React.FC<{
             onSquareClick(sq);
           }}
         >
-          <boxGeometry args={[0.91, 0.24, 0.91]} />
+          <boxGeometry args={[0.92, 0.24, 0.92]} />
           <meshStandardMaterial
             map={stoneTex}
             color={tileColor}
@@ -768,7 +802,7 @@ const DungeonStoneTile3D: React.FC<{
             onSquareClick(sq);
           }}
         >
-          <boxGeometry args={[0.85, 0.04, 0.85]} />
+          <boxGeometry args={[0.86, 0.04, 0.86]} />
           <meshStandardMaterial
             map={stoneTex}
             color={tileColor}
@@ -779,36 +813,43 @@ const DungeonStoneTile3D: React.FC<{
           />
         </mesh>
 
-        {/* Glowing Carved Rune Glyph on the Surface of the Stone Slab */}
+        {/* Soft Additive Bloom Halo + Glowing Carved Rune Glyph on Power Slabs */}
         {(runeInfo.showRune || isSelected || isLastMoveTo || isLegalTarget) && (
-          <Text
-            position={[0, 0.066, 0]}
-            rotation={[-Math.PI / 2, 0, 0]}
-            fontSize={isSelected || isLegalTarget ? 0.46 : 0.38}
-            color={
-              isCaptureTarget
-                ? '#ef4444'
-                : isLegalTarget
-                ? '#34d399'
-                : isSelected
-                ? '#fde047'
-                : runeInfo.color
-            }
-            fillOpacity={
-              isSelected || isLegalTarget || isLastMoveTo ? 0.95 : 0.52
-            }
-            anchorX="center"
-            anchorY="middle"
-          >
-            {runeInfo.glyph}
-          </Text>
+          <>
+            <mesh position={[0, 0.062, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <planeGeometry args={[0.76, 0.76]} />
+              <meshBasicMaterial
+                map={glowTex}
+                color={activeRuneColor}
+                transparent
+                opacity={
+                  isSelected || isLegalTarget || isLastMoveTo ? 0.65 : 0.38
+                }
+                blending={THREE.AdditiveBlending}
+                depthWrite={false}
+              />
+            </mesh>
+            <Text
+              position={[0, 0.066, 0]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              fontSize={isSelected || isLegalTarget ? 0.44 : 0.38}
+              color={activeRuneColor}
+              fillOpacity={
+                isSelected || isLegalTarget || isLastMoveTo ? 0.98 : 0.88
+              }
+              anchorX="center"
+              anchorY="middle"
+            >
+              {runeInfo.glyph}
+            </Text>
+          </>
         )}
 
-        {/* Outer Stepped Cliff Edge Inscriptions along the 4 Sides of the Board (Just like the Concept Art!) */}
+        {/* Outer Stepped Cliff Edge Inscriptions along the Front Border of the Board (Just like the Concept Art!) */}
         {rIdx === 7 && (
           <Text
-            position={[0, -0.06, 0.465]}
-            fontSize={0.13}
+            position={[0, -0.06, 0.468]}
+            fontSize={0.125}
             color="#38bdf8"
             anchorX="center"
             anchorY="middle"
@@ -858,11 +899,13 @@ const DungeonStoneTile3D: React.FC<{
   );
 };
 
-// Atmospheric Dungeon Props around the Board (Warm Metal Lanterns on the Stone Ledge + Floating Blue Mana Crystals + Mist)
+// Atmospheric Dungeon Props around the Board (Warm Metal Lanterns on the Stone Ledge + Floating Blue Mana Crystals + Volumetric Dungeon Mist)
 const DungeonBoardProps3D: React.FC<{ runeColor: string }> = ({
   runeColor,
 }) => {
   const crystalsRef = useRef<THREE.Group>(null);
+  const mistRef = useRef<THREE.Group>(null);
+  const glowTex = useMemo(() => getGlowHaloTexture(), []);
 
   useFrame((state, delta) => {
     if (crystalsRef.current) {
@@ -870,6 +913,12 @@ const DungeonBoardProps3D: React.FC<{ runeColor: string }> = ({
         child.position.y =
           1.35 + Math.sin(state.clock.elapsedTime * 2.2 + idx * 1.7) * 0.18;
         child.rotation.y += delta * 1.1;
+      });
+    }
+    if (mistRef.current) {
+      mistRef.current.children.forEach((cloud, idx) => {
+        cloud.rotation.z =
+          Math.sin(state.clock.elapsedTime * 0.25 + idx) * 0.35;
       });
     }
   });
@@ -888,8 +937,38 @@ const DungeonBoardProps3D: React.FC<{ runeColor: string }> = ({
     [4.65, 1.35, 3.4],
   ];
 
+  const mistPositions: [number, number, number][] = [
+    [-5.4, -0.32, 3.8],
+    [5.4, -0.32, 3.8],
+    [-5.4, -0.32, -3.8],
+    [5.4, -0.32, -3.8],
+    [0, -0.35, 5.4],
+    [0, -0.35, -5.4],
+  ];
+
   return (
     <group>
+      {/* Cool Blue-Slate Volumetric Dungeon Mist Clouds around the Stepped Altar */}
+      <group ref={mistRef}>
+        {mistPositions.map((mPos, idx) => (
+          <mesh
+            key={`mist-${idx}`}
+            position={mPos}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <planeGeometry args={[5.5, 5.5]} />
+            <meshBasicMaterial
+              map={glowTex}
+              color="#38bdf8"
+              transparent
+              opacity={0.14}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
+        ))}
+      </group>
+
       {/* 4 Warm Glowing Dungeon Table Lanterns sitting on the outer stone ledge */}
       {lanternPositions.map((pos, idx) => (
         <group key={`lantern-${idx}`} position={pos}>
@@ -908,9 +987,23 @@ const DungeonBoardProps3D: React.FC<{ runeColor: string }> = ({
             <meshStandardMaterial
               color="#fef08a"
               emissive="#f59e0b"
-              emissiveIntensity={1.5}
+              emissiveIntensity={1.6}
             />
           </mesh>
+          {/* Warm Additive Bloom Halo around the Lantern */}
+          <Billboard position={[0, 0.28, 0]}>
+            <mesh>
+              <planeGeometry args={[1.1, 1.1]} />
+              <meshBasicMaterial
+                map={glowTex}
+                color="#fb923c"
+                transparent
+                opacity={0.55}
+                blending={THREE.AdditiveBlending}
+                depthWrite={false}
+              />
+            </mesh>
+          </Billboard>
           {/* Iron Cage Bars */}
           <mesh position={[0, 0.26, 0]}>
             <boxGeometry args={[0.25, 0.34, 0.25]} />
@@ -933,13 +1026,13 @@ const DungeonBoardProps3D: React.FC<{ runeColor: string }> = ({
           <pointLight
             position={[0, 0.3, 0]}
             color="#ff9500"
-            intensity={1.1}
-            distance={4.5}
+            intensity={1.25}
+            distance={4.8}
           />
         </group>
       ))}
 
-      {/* 4 Floating Glowing Blue Mana Crystals (Just like in the Pitch Concept Art!) */}
+      {/* 4 Floating Glowing Blue Mana Crystals with Additive Cyan Bloom Halo */}
       <group ref={crystalsRef}>
         {crystalPositions.map((pos, idx) => (
           <group key={`mana-crystal-${idx}`} position={pos}>
@@ -948,13 +1041,26 @@ const DungeonBoardProps3D: React.FC<{ runeColor: string }> = ({
               <meshStandardMaterial
                 color="#38bdf8"
                 emissive="#0284c7"
-                emissiveIntensity={1.25}
+                emissiveIntensity={1.35}
                 roughness={0.1}
                 metalness={0.6}
                 transparent
-                opacity={0.9}
+                opacity={0.92}
               />
             </mesh>
+            <Billboard position={[0, 0, 0]}>
+              <mesh>
+                <planeGeometry args={[1.25, 1.25]} />
+                <meshBasicMaterial
+                  map={glowTex}
+                  color="#38bdf8"
+                  transparent
+                  opacity={0.5}
+                  blending={THREE.AdditiveBlending}
+                  depthWrite={false}
+                />
+              </mesh>
+            </Billboard>
             {/* Orbiting Mana Halo Ring */}
             <mesh rotation={[Math.PI / 2.4, 0.3, 0]}>
               <ringGeometry args={[0.32, 0.36, 20]} />
@@ -1204,14 +1310,13 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
         />
       </mesh>
 
-      {/* Dark Magma / Mana Under-bed beneath the 64 Stone Slabs (visible in the gaps between tiles!) */}
+      {/* Deep Dark Stone Shadow Bed beneath the 64 Stone Slabs (Authentic dark grout shadow joints!) */}
       <mesh position={[0, -0.11, 0]} receiveShadow>
         <boxGeometry args={[8.18, 0.16, 8.18]} />
         <meshStandardMaterial
-          color="#09070b"
-          emissive={level.theme.runeGlowColor}
-          emissiveIntensity={0.22}
-          roughness={0.9}
+          color="#0a080c"
+          roughness={0.96}
+          metalness={0.05}
         />
       </mesh>
 

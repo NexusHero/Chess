@@ -864,7 +864,7 @@ export const App: React.FC = () => {
       <div className="absolute inset-0 z-0">
         <Canvas
           shadows
-          camera={{ position: [0, 7.1, 7.6], fov: 42 }}
+          camera={{ position: [0, 8.2, 6.8], fov: 40 }}
           gl={{ antialias: true, powerPreference: 'high-performance' }}
         >
           <Suspense fallback={null}>
@@ -905,6 +905,14 @@ export const App: React.FC = () => {
             />
           </Suspense>
         </Canvas>
+        {/* Subtle Cinematic Dungeon Vignette */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'radial-gradient(circle at 50% 48%, transparent 56%, rgba(4, 3, 7, 0.62) 100%)',
+          }}
+        />
       </div>
 
       {/* Floating Live Emoji Reactions Overlay */}
