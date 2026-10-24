@@ -70,8 +70,67 @@ interface DungeonArena3DProps {
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'];
 
-// Ancient Dungeon Rune Glyphs matching the Pitch Concept Art!
+// Ancient Dungeon Rune Glyphs + Islamic Festive Star/Crescent Ornament Symbols for Ramadan!
 const RUNE_GLYPHS = ['ᚠ', 'ᚢ', 'ᚦ', 'ᚨ', 'ᚱ', 'ᚲ', 'ᚷ', 'ᚹ', 'ᛉ', 'ᛋ', 'ᛏ', 'ᛒ', 'ᛖ', 'ᛗ', 'ᛚ', 'ᛞ'];
+const RAMADAN_ORNAMENTS = ['۞', '☪', '✦', '✧', '۞', '☪', '✦', '۞'];
+
+// Procedural 8-Pointed Islamic Star (Rub el Hizb) & Crescent Inlay Texture for Ramadan Tiles!
+let cachedIslamicTileTex: THREE.CanvasTexture | null = null;
+function getIslamicStarTileTexture(): THREE.CanvasTexture {
+  if (cachedIslamicTileTex) return cachedIslamicTileTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.clearRect(0, 0, 256, 256);
+  ctx.save();
+  ctx.translate(128, 128);
+
+  // Outer soft golden radial glow
+  const grad = ctx.createRadialGradient(0, 0, 8, 0, 0, 110);
+  grad.addColorStop(0, 'rgba(253, 224, 71, 0.55)');
+  grad.addColorStop(0.6, 'rgba(245, 158, 11, 0.22)');
+  grad.addColorStop(1, 'rgba(245, 158, 11, 0.0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, 110, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Draw two overlapping rotated squares -> Classic Islamic 8-Pointed Star (Rub el Hizb ۞)
+  ctx.strokeStyle = '#fde047';
+  ctx.lineWidth = 6;
+  for (let r = 0; r < 2; r++) {
+    ctx.save();
+    ctx.rotate((r * Math.PI) / 4);
+    ctx.strokeRect(-52, -52, 104, 104);
+    ctx.restore();
+  }
+
+  // Draw Crescent Moon (Hilal) in the center of the 8-pointed star
+  ctx.fillStyle = '#fef08a';
+  ctx.beginPath();
+  ctx.arc(0, 0, 26, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(10, -6, 22, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalCompositeOperation = 'source-over';
+  // Little 5-pointed star next to the crescent
+  ctx.fillStyle = '#fde047';
+  ctx.beginPath();
+  ctx.arc(14, -6, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  cachedIslamicTileTex = tex;
+  return tex;
+}
 
 // Procedural Radial Glow Texture for Additive Bloom Halos around Runes, Lanterns & Mana Crystals
 let cachedGlowHaloTex: THREE.CanvasTexture | null = null;
@@ -333,32 +392,206 @@ const SpecialThemeSky3D: React.FC<{ specialTheme?: SpecialThemeType }> = ({
   if (specialTheme === 'ramadan') {
     return (
       <group>
-        {/* Giant Glowing 3D Golden Crescent Moon & Star behind the board */}
-        <group ref={moonGroupRef} position={[0, 4.6, -6.2]}>
+        {/* 1. Left & Right Illuminated 3D Mosque Pavilion Wings with Golden Domes, Minarets & Oriental Arches (Framed on the sides so they are 100% visible in the camera view!) */}
+        {[-5.55, 5.55].map((sideX, sIdx) => {
+          const isLeft = sIdx === 0;
+          return (
+            <group
+              key={`mosque-wing-${sIdx}`}
+              position={[sideX, -0.35, -0.8]}
+              rotation={[0, isLeft ? Math.PI / 2 : -Math.PI / 2, 0]}
+            >
+              {/* Emerald- & Gold-Trimmed Mosque Arcade Wall */}
+              <mesh position={[0, 0.75, 0]} receiveShadow castShadow>
+                <boxGeometry args={[4.6, 1.5, 0.55]} />
+                <meshStandardMaterial
+                  color="#064e3b"
+                  roughness={0.5}
+                  metalness={0.3}
+                />
+              </mesh>
+              <mesh position={[0, 1.54, 0]}>
+                <boxGeometry args={[4.8, 0.12, 0.68]} />
+                <meshStandardMaterial
+                  color="#fbbf24"
+                  emissive="#d97706"
+                  emissiveIntensity={0.6}
+                  metalness={0.88}
+                  roughness={0.18}
+                />
+              </mesh>
+
+              {/* 3 Illuminated Golden Oriental Arches per Wing */}
+              {[-1.4, 0, 1.4].map((ax, aIdx) => (
+                <group key={`wing-arch-${aIdx}`} position={[ax, 0.72, 0.29]}>
+                  <mesh position={[0, 0.22, 0]}>
+                    <torusGeometry args={[0.36, 0.045, 10, 24, Math.PI * 1.15]} />
+                    <meshStandardMaterial
+                      color="#fde047"
+                      emissive="#f59e0b"
+                      emissiveIntensity={0.9}
+                      metalness={0.85}
+                    />
+                  </mesh>
+                  <mesh position={[0, 0.02, -0.01]}>
+                    <planeGeometry args={[0.58, 0.92]} />
+                    <meshBasicMaterial
+                      color="#fef08a"
+                      transparent
+                      opacity={0.42}
+                    />
+                  </mesh>
+                </group>
+              ))}
+
+              {/* Central Golden Mosque Dome + Hilal Finial */}
+              <group position={[0, 1.58, 0]}>
+                <mesh position={[0, 0.2, 0]}>
+                  <cylinderGeometry args={[0.95, 1.02, 0.35, 24]} />
+                  <meshStandardMaterial
+                    color="#047857"
+                    metalness={0.4}
+                    roughness={0.35}
+                  />
+                </mesh>
+                <mesh position={[0, 0.38, 0]}>
+                  <sphereGeometry
+                    args={[0.92, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.58]}
+                  />
+                  <meshStandardMaterial
+                    color="#fbbf24"
+                    emissive="#d97706"
+                    emissiveIntensity={0.65}
+                    metalness={0.9}
+                    roughness={0.15}
+                  />
+                </mesh>
+                {/* Spire & Golden Crescent on Top of the Dome */}
+                <mesh position={[0, 1.42, 0]}>
+                  <cylinderGeometry args={[0.025, 0.045, 0.38, 8]} />
+                  <meshBasicMaterial color="#fde047" />
+                </mesh>
+                <mesh
+                  position={[0, 1.68, 0]}
+                  rotation={[0, 0, Math.PI * 0.15]}
+                >
+                  <torusGeometry args={[0.16, 0.032, 10, 24, Math.PI * 1.35]} />
+                  <meshBasicMaterial color="#fef08a" />
+                </mesh>
+              </group>
+
+              {/* 2 Smaller Flanking Golden Domes */}
+              {[-1.55, 1.55].map((dx, dIdx) => (
+                <group key={`small-dome-${dIdx}`} position={[dx, 1.58, 0]}>
+                  <mesh position={[0, 0.15, 0]}>
+                    <sphereGeometry
+                      args={[0.56, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.58]}
+                    />
+                    <meshStandardMaterial
+                      color="#f59e0b"
+                      emissive="#b45309"
+                      emissiveIntensity={0.5}
+                      metalness={0.85}
+                      roughness={0.2}
+                    />
+                  </mesh>
+                </group>
+              ))}
+
+              {/* Slender Illuminated Minaret Tower at the Back Corner of Each Mosque Wing */}
+              <group position={[isLeft ? -2.6 : 2.6, 0, 0]}>
+                <mesh position={[0, 1.85, 0]}>
+                  <cylinderGeometry args={[0.2, 0.3, 3.6, 16]} />
+                  <meshStandardMaterial
+                    color="#fef3c7"
+                    roughness={0.4}
+                    metalness={0.2}
+                  />
+                </mesh>
+                {/* Glowing Sherefe Balcony Ring */}
+                <mesh position={[0, 2.75, 0]}>
+                  <cylinderGeometry args={[0.34, 0.26, 0.15, 16]} />
+                  <meshStandardMaterial
+                    color="#fbbf24"
+                    emissive="#f59e0b"
+                    emissiveIntensity={1.1}
+                    metalness={0.85}
+                  />
+                </mesh>
+                {/* Golden Conical Minaret Roof + Crescent */}
+                <mesh position={[0, 3.95, 0]}>
+                  <coneGeometry args={[0.22, 0.72, 16]} />
+                  <meshStandardMaterial
+                    color="#fbbf24"
+                    emissive="#d97706"
+                    emissiveIntensity={0.6}
+                    metalness={0.9}
+                    roughness={0.15}
+                  />
+                </mesh>
+                <mesh
+                  position={[0, 4.42, 0]}
+                  rotation={[0, 0, Math.PI * 0.15]}
+                >
+                  <torusGeometry args={[0.12, 0.025, 8, 20, Math.PI * 1.35]} />
+                  <meshBasicMaterial color="#fef08a" />
+                </mesh>
+              </group>
+            </group>
+          );
+        })}
+
+        {/* 2. Festive Illuminated Fairy Light Garland (Lichterkette) across the Back of the Board */}
+        <group position={[0, 2.55, -4.55]}>
+          {[-3.6, -2.4, -1.2, 0, 1.2, 2.4, 3.6].map((lx, idx) => {
+            const sagY = -Math.cos((lx / 4.0) * (Math.PI / 2)) * 0.38;
+            const isStar = idx % 2 === 0;
+            return (
+              <group key={`garland-${idx}`} position={[lx, sagY, 0]}>
+                <mesh position={[0, 0.18, 0]}>
+                  <cylinderGeometry args={[0.008, 0.008, 0.36, 6]} />
+                  <meshBasicMaterial color="#fde047" />
+                </mesh>
+                {isStar ? (
+                  <mesh rotation={[0, 0, Math.PI / 4]}>
+                    <octahedronGeometry args={[0.14, 0]} />
+                    <meshBasicMaterial color="#fef08a" />
+                  </mesh>
+                ) : (
+                  <mesh>
+                    <cylinderGeometry args={[0.09, 0.06, 0.2, 6]} />
+                    <meshStandardMaterial
+                      color="#fbbf24"
+                      emissive="#f59e0b"
+                      emissiveIntensity={1.5}
+                    />
+                  </mesh>
+                )}
+              </group>
+            );
+          })}
+        </group>
+
+        {/* 3. Glowing 3D Golden Crescent Moon & Star + Heartfelt Trilingual Greeting Banner */}
+        <group ref={moonGroupRef} position={[0, 3.1, -5.2]}>
           <mesh rotation={[0, 0, Math.PI * 0.15]}>
-            <torusGeometry args={[1.35, 0.24, 16, 48, Math.PI * 1.35]} />
+            <torusGeometry args={[0.85, 0.15, 16, 48, Math.PI * 1.35]} />
             <meshStandardMaterial
               color="#fde047"
               emissive="#f59e0b"
-              emissiveIntensity={0.95}
-              metalness={0.85}
-              roughness={0.15}
+              emissiveIntensity={1.15}
+              metalness={0.9}
+              roughness={0.12}
             />
           </mesh>
-          {/* 3D Star inside the Crescent */}
-          <mesh position={[0.55, 0.35, 0]}>
-            <octahedronGeometry args={[0.34, 0]} />
+          <mesh position={[0.35, 0.22, 0]}>
+            <octahedronGeometry args={[0.22, 0]} />
             <meshStandardMaterial
               color="#fef08a"
               emissive="#fbbf24"
-              emissiveIntensity={1.1}
+              emissiveIntensity={1.3}
             />
           </mesh>
-          <Html position={[0, -1.75, 0]} center zIndexRange={[5, 0]}>
-            <div className="pointer-events-none px-3 py-1 rounded-full bg-emerald-950/90 border border-amber-400 text-amber-200 text-xs font-extrabold shadow-lg whitespace-nowrap">
-              🌙 Ramadan Mubarak • Familien-Schachabend ✨
-            </div>
-          </Html>
         </group>
       </group>
     );
@@ -965,6 +1198,7 @@ const DungeonStoneTile3D: React.FC<{
   emissiveIntensity: number;
   kidMode: boolean;
   runeGlowColor: string;
+  specialTheme?: SpecialThemeType;
   onSquareClick: (sq: Square) => void;
 }> = ({
   sq,
@@ -982,12 +1216,15 @@ const DungeonStoneTile3D: React.FC<{
   emissiveIntensity,
   kidMode,
   runeGlowColor,
+  specialTheme = 'default',
   onSquareClick,
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const pressDepth = useRef(0);
   const stoneTex = useMemo(() => getCarvedStoneTexture(), []);
   const glowTex = useMemo(() => getGlowHaloTexture(), []);
+  const islamicTileTex = useMemo(() => getIslamicStarTileTexture(), []);
+  const isRamadan = specialTheme === 'ramadan';
 
   // Deterministic height micro-variation so the 64 flagstones look hand-laid
   const slabHeightOffset = useMemo(
@@ -995,10 +1232,12 @@ const DungeonStoneTile3D: React.FC<{
     [rIdx, cIdx]
   );
 
-  // Art-Director 70/30 Rule: Selective Glowing Power Runes so the board stays readable & magical!
+  // Art-Director 70/30 Rule: Selective Glowing Power Runes (or Islamic Rub el Hizb ۞ & Crescent ☪ ornaments in Ramadan!)
   const runeInfo = useMemo(() => {
     const hash = rIdx * 8 + cIdx;
-    const glyph = RUNE_GLYPHS[hash % RUNE_GLYPHS.length];
+    const glyph = isRamadan
+      ? RAMADAN_ORNAMENTS[hash % RAMADAN_ORNAMENTS.length]
+      : RUNE_GLYPHS[hash % RUNE_GLYPHS.length];
     const isCyanRune = (rIdx + cIdx) % 2 === 0;
     const isCenterSanctum =
       (rIdx === 3 || rIdx === 4) && (cIdx === 3 || cIdx === 4);
@@ -1010,10 +1249,16 @@ const DungeonStoneTile3D: React.FC<{
       isCenterSanctum || isFrontOrBackEdgeRune || isFrontBorderShowcase;
     return {
       glyph,
-      color: isCyanRune ? '#38bdf8' : '#fb923c',
+      color: isRamadan
+        ? isCyanRune
+          ? '#fbbf24'
+          : '#34d399'
+        : isCyanRune
+        ? '#38bdf8'
+        : '#fb923c',
       showRune,
     };
-  }, [rIdx, cIdx]);
+  }, [rIdx, cIdx, isRamadan]);
 
   useEffect(() => {
     if (isLastMoveTo || isSelected) {
@@ -1083,7 +1328,7 @@ const DungeonStoneTile3D: React.FC<{
           />
         </mesh>
 
-        {/* Soft Additive Bloom Halo + Glowing Carved Rune Glyph on Power Slabs */}
+        {/* Soft Additive Bloom Halo + Glowing Carved Rune Glyph (or Islamic 8-Pointed Star & Crescent Inlay in Ramadan!) */}
         {(runeInfo.showRune || isSelected || isLastMoveTo || isLegalTarget) && (
           <>
             <mesh position={[0, 0.062, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -1099,36 +1344,53 @@ const DungeonStoneTile3D: React.FC<{
                 depthWrite={false}
               />
             </mesh>
-            <Text
-              position={[0, 0.066, 0]}
-              rotation={[-Math.PI / 2, 0, 0]}
-              fontSize={isSelected || isLegalTarget ? 0.44 : 0.38}
-              color={activeRuneColor}
-              fillOpacity={
-                isSelected || isLegalTarget || isLastMoveTo ? 0.98 : 0.88
-              }
-              anchorX="center"
-              anchorY="middle"
-            >
-              {runeInfo.glyph}
-            </Text>
+            {isRamadan ? (
+              <mesh position={[0, 0.066, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[0.68, 0.68]} />
+                <meshBasicMaterial
+                  map={islamicTileTex}
+                  color={activeRuneColor}
+                  transparent
+                  opacity={
+                    isSelected || isLegalTarget || isLastMoveTo ? 0.98 : 0.9
+                  }
+                  depthWrite={false}
+                />
+              </mesh>
+            ) : (
+              <Text
+                position={[0, 0.066, 0]}
+                rotation={[-Math.PI / 2, 0, 0]}
+                fontSize={isSelected || isLegalTarget ? 0.44 : 0.38}
+                color={activeRuneColor}
+                fillOpacity={
+                  isSelected || isLegalTarget || isLastMoveTo ? 0.98 : 0.88
+                }
+                anchorX="center"
+                anchorY="middle"
+              >
+                {runeInfo.glyph}
+              </Text>
+            )}
           </>
         )}
 
-        {/* Outer Stepped Cliff Edge Inscriptions along the Front Border of the Board (Just like the Concept Art!) */}
+        {/* Outer Stepped Cliff Edge Inscriptions along the Front Border of the Board */}
         {rIdx === 7 && (
           <Text
             position={[0, -0.06, 0.468]}
             fontSize={0.125}
-            color="#38bdf8"
+            color={isRamadan ? '#fde047' : '#38bdf8'}
             anchorX="center"
             anchorY="middle"
           >
-            {`${RUNE_GLYPHS[(cIdx * 3) % RUNE_GLYPHS.length]} ${FILES[
-              cIdx
-            ].toUpperCase()} ${
-              RUNE_GLYPHS[(cIdx * 3 + 1) % RUNE_GLYPHS.length]
-            }`}
+            {isRamadan
+              ? `۞ ${FILES[cIdx].toUpperCase()} ☪`
+              : `${RUNE_GLYPHS[(cIdx * 3) % RUNE_GLYPHS.length]} ${FILES[
+                  cIdx
+                ].toUpperCase()} ${
+                  RUNE_GLYPHS[(cIdx * 3 + 1) % RUNE_GLYPHS.length]
+                }`}
           </Text>
         )}
       </group>
@@ -1169,13 +1431,15 @@ const DungeonStoneTile3D: React.FC<{
   );
 };
 
-// Atmospheric Dungeon Props around the Board (Warm Metal Lanterns on the Stone Ledge + Floating Blue Mana Crystals + Volumetric Dungeon Mist)
-const DungeonBoardProps3D: React.FC<{ runeColor: string }> = ({
-  runeColor,
-}) => {
+// Atmospheric Dungeon Props around the Board (Warm Metal Lanterns + Golden Iftar Dallah/Dates Tray in Ramadan + Floating Eight-Pointed Stars / Mana Crystals)
+const DungeonBoardProps3D: React.FC<{
+  runeColor: string;
+  specialTheme?: SpecialThemeType;
+}> = ({ runeColor, specialTheme = 'default' }) => {
   const crystalsRef = useRef<THREE.Group>(null);
   const mistRef = useRef<THREE.Group>(null);
   const glowTex = useMemo(() => getGlowHaloTexture(), []);
+  const isRamadan = specialTheme === 'ramadan';
 
   useFrame((state, delta) => {
     if (crystalsRef.current) {
@@ -1229,9 +1493,9 @@ const DungeonBoardProps3D: React.FC<{ runeColor: string }> = ({
             <planeGeometry args={[5.5, 5.5]} />
             <meshBasicMaterial
               map={glowTex}
-              color="#38bdf8"
+              color={isRamadan ? '#fbbf24' : '#38bdf8'}
               transparent
-              opacity={0.14}
+              opacity={isRamadan ? 0.16 : 0.14}
               blending={THREE.AdditiveBlending}
               depthWrite={false}
             />
@@ -1302,28 +1566,118 @@ const DungeonBoardProps3D: React.FC<{ runeColor: string }> = ({
         </group>
       ))}
 
-      {/* 4 Floating Glowing Blue Mana Crystals with Additive Cyan Bloom Halo */}
+      {/* In Ramadan Theme: Heartfelt Iftar Hospitality Corners (Golden Dallah Tea/Coffee Pot + Brass Tray with Medjool Dates!) */}
+      {isRamadan &&
+        [
+          [-4.35, 0.05, 0],
+          [4.35, 0.05, 0],
+        ].map(([tx, ty, tz], tIdx) => (
+          <group key={`iftar-tray-${tIdx}`} position={[tx, ty, tz]}>
+            {/* Ornate Golden Brass Serving Tray (Siniya) */}
+            <mesh position={[0, 0.02, 0]} receiveShadow>
+              <cylinderGeometry args={[0.42, 0.38, 0.03, 24]} />
+              <meshStandardMaterial
+                color="#fbbf24"
+                metalness={0.88}
+                roughness={0.18}
+              />
+            </mesh>
+            {/* Golden Arabic Dallah / Caydanlik Teapot */}
+            <group position={[-0.1, 0.04, -0.05]}>
+              <mesh position={[0, 0.14, 0]} castShadow>
+                <cylinderGeometry args={[0.08, 0.13, 0.26, 16]} />
+                <meshStandardMaterial
+                  color="#f59e0b"
+                  emissive="#d97706"
+                  emissiveIntensity={0.35}
+                  metalness={0.9}
+                  roughness={0.15}
+                />
+              </mesh>
+              <mesh position={[0, 0.3, 0]}>
+                <coneGeometry args={[0.09, 0.12, 16]} />
+                <meshStandardMaterial
+                  color="#fde047"
+                  metalness={0.9}
+                  roughness={0.15}
+                />
+              </mesh>
+            </group>
+            {/* Small Bowl of Sweet Iftar Dates (Hurma / Tamr) */}
+            <group position={[0.14, 0.05, 0.1]}>
+              <mesh position={[0, 0.03, 0]}>
+                <cylinderGeometry args={[0.13, 0.09, 0.06, 14]} />
+                <meshStandardMaterial
+                  color="#fde047"
+                  metalness={0.85}
+                  roughness={0.2}
+                />
+              </mesh>
+              {[-0.04, 0.04, 0].map((dx, dIdx) => (
+                <mesh
+                  key={dIdx}
+                  position={[dx, 0.07, dIdx === 2 ? 0.04 : -0.02]}
+                  scale={[1.2, 0.8, 0.8]}
+                >
+                  <sphereGeometry args={[0.038, 8, 8]} />
+                  <meshStandardMaterial color="#78350f" roughness={0.4} />
+                </mesh>
+              ))}
+            </group>
+          </group>
+        ))}
+
+      {/* 4 Floating Glowing Eight-Pointed Islamic Rub el Hizb Stars (in Ramadan) or Blue Mana Crystals */}
       <group ref={crystalsRef}>
         {crystalPositions.map((pos, idx) => (
           <group key={`mana-crystal-${idx}`} position={pos}>
-            <mesh scale={[0.24, 0.46, 0.24]}>
-              <octahedronGeometry args={[1, 0]} />
-              <meshStandardMaterial
-                color="#38bdf8"
-                emissive="#0284c7"
-                emissiveIntensity={1.35}
-                roughness={0.1}
-                metalness={0.6}
-                transparent
-                opacity={0.92}
-              />
-            </mesh>
+            {isRamadan ? (
+              /* Golden Eight-Pointed Islamic Star (Rub el Hizb ۞) */
+              <group>
+                <mesh scale={[0.34, 0.34, 0.12]}>
+                  <boxGeometry args={[1, 1, 1]} />
+                  <meshStandardMaterial
+                    color="#fde047"
+                    emissive="#f59e0b"
+                    emissiveIntensity={1.2}
+                    metalness={0.88}
+                    roughness={0.15}
+                  />
+                </mesh>
+                <mesh
+                  scale={[0.34, 0.34, 0.12]}
+                  rotation={[0, 0, Math.PI / 4]}
+                >
+                  <boxGeometry args={[1, 1, 1]} />
+                  <meshStandardMaterial
+                    color="#fbbf24"
+                    emissive="#d97706"
+                    emissiveIntensity={1.2}
+                    metalness={0.88}
+                    roughness={0.15}
+                  />
+                </mesh>
+              </group>
+            ) : (
+              <mesh scale={[0.24, 0.46, 0.24]}>
+                <octahedronGeometry args={[1, 0]} />
+                <meshStandardMaterial
+                  color="#38bdf8"
+                  emissive="#0284c7"
+                  emissiveIntensity={1.35}
+                  roughness={0.1}
+                  metalness={0.6}
+                  transparent
+                  opacity={0.92}
+                />
+              </mesh>
+            )}
             <Billboard position={[0, 0, 0]}>
               <mesh>
                 <planeGeometry args={[1.25, 1.25]} />
                 <meshBasicMaterial
                   map={glowTex}
-                  color="#38bdf8"
+                  color={isRamadan ? '#fbbf24' : '#38bdf8'}
                   transparent
                   opacity={0.5}
                   blending={THREE.AdditiveBlending}
@@ -1331,14 +1685,14 @@ const DungeonBoardProps3D: React.FC<{ runeColor: string }> = ({
                 />
               </mesh>
             </Billboard>
-            {/* Orbiting Mana Halo Ring */}
+            {/* Orbiting Halo Ring */}
             <mesh rotation={[Math.PI / 2.4, 0.3, 0]}>
               <ringGeometry args={[0.32, 0.36, 20]} />
               <meshBasicMaterial
-                color={runeColor || '#38bdf8'}
+                color={isRamadan ? '#fde047' : runeColor || '#38bdf8'}
                 side={THREE.DoubleSide}
                 transparent
-                opacity={0.7}
+                opacity={0.75}
               />
             </mesh>
           </group>
@@ -1590,8 +1944,11 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
         />
       </mesh>
 
-      {/* Atmospheric Lanterns & Floating Blue Mana Crystals around the Board */}
-      <DungeonBoardProps3D runeColor={level.theme.runeGlowColor} />
+      {/* Atmospheric Lanterns, Iftar Trays & Floating Islamic Stars / Mana Crystals around the Board */}
+      <DungeonBoardProps3D
+        runeColor={level.theme.runeGlowColor}
+        specialTheme={level.specialTheme}
+      />
 
       {/* 4 Corner Dungeon / Ramadan Fanous / Halloween Pumpkin Pillars */}
       <TorchPillar
@@ -1712,6 +2069,7 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
                 emissiveIntensity={emissiveIntensity}
                 kidMode={kidMode}
                 runeGlowColor={level.theme.runeGlowColor}
+                specialTheme={level.specialTheme}
                 onSquareClick={onSquareClick}
               />
             );

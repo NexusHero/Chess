@@ -1242,6 +1242,19 @@ export const App: React.FC = () => {
       {/* MIDDLE FLOATING BANNERS */}
       <div className="relative z-10 pointer-events-none flex-1 flex flex-col justify-between p-3 sm:p-5">
         <div className="flex flex-col items-center gap-2">
+          {/* Heartfelt Ramadan Mubarak Trilingual Greeting Banner when Ramadan Theme is active */}
+          {currentLevel.specialTheme === 'ramadan' && (
+            <div className="pointer-events-auto flex items-center gap-2.5 px-4 py-1 rounded-full bg-gradient-to-r from-emerald-950/90 via-teal-900/90 to-emerald-950/90 border border-amber-400/80 shadow-[0_0_25px_rgba(251,191,36,0.35)] backdrop-blur-md">
+              <span className="text-sm">🌙</span>
+              <span className="text-[11px] sm:text-xs font-extrabold tracking-wide text-amber-300">
+                رمضان كريم • Ramadan Mubarak • Hayırlı Ramazanlar
+              </span>
+              <span className="hidden md:inline text-[11px] text-emerald-200 font-semibold">
+                — Herzlicher Familien-Schachabend nach dem Iftar 🫖🌴✨
+              </span>
+            </div>
+          )}
+
           {/* Status Pill with Animated Hero Portraits */}
           <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-3 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-950/85 via-black/85 to-purple-950/85 border-2 border-amber-400/50 backdrop-blur-md shadow-[0_0_25px_rgba(251,191,36,0.25)]">
             <img
