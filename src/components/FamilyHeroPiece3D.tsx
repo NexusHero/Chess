@@ -24,12 +24,12 @@ interface FamilyHeroPieceProps {
 }
 
 const ROLE_HEIGHT_SCALE: Record<PieceRole, number> = {
-  k: 2.15,
-  q: 2.05,
-  b: 1.88,
-  n: 1.78,
-  r: 1.9,
-  p: 1.62,
+  k: 1.78,
+  q: 1.72,
+  b: 1.56,
+  n: 1.48,
+  r: 1.58,
+  p: 1.34,
 };
 
 export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
@@ -588,13 +588,12 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         {/* Floating RPG Hero Badge */}
         {(hovered || isSelected || showNameplate || isShielded || isFrozen) && (
           <Html
-            position={[0, baseScale * 0.58, 0]}
+            position={[0, baseScale * 0.54, 0]}
             center
-            distanceFactor={9}
             zIndexRange={[10, 0]}
           >
             <div
-              className={`pointer-events-none px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap shadow-lg border backdrop-blur-md transition-all ${
+              className={`pointer-events-none px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap shadow-md border backdrop-blur-md transition-all ${
                 isFrozen
                   ? 'bg-sky-950/95 text-sky-200 border-sky-400'
                   : isShielded

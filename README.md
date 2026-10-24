@@ -34,26 +34,36 @@
 
 ## 📸 Screenshots aus dem Live-Spiel
 
-### 1. Level 1: Die Königliche Tor-Halle (mit beiden Cousinen-Skins & Superkraft-Button)
-> Beide Cousinen wechseln sich in der Bauern-Reihe ab (*Cousine Dolch* & *Cousine Rune* im Hahnentritt-Gewand). Unten links erscheint der **„⚡ Superkraft zünden!“**-Button der ausgewählten Figur:
+### 1. Level 1: Die Königliche Tor-Halle (mit 3D-Steinsockeln, 3D-Flugbahn-Lichtbogen & beiden Cousinen-Skins)
+> Jede Figur steht auf einem gemeißelten **3D-Steinsockel mit echten Felsbrocken um die Füße**. Über den Köpfen schweben rotierende **3D-Embleme** (Krone, Kristall, Diamant) und ein blauer **3D-Parabel-Lichtbogen** zeigt den empfohlenen Zug:
 
 ![Level 1 – Königliche Tor-Halle](docs/screenshots/01-level1-royal-hall.png)
 
-### 2. Neu in v2.0: Prinzessin Minis Schatzjagd (Kinder-Abenteuermodus)
+### 2. Neu: 🌙 Ramadan-Edition („Palast des Goldenen Halbmondes“)
+> Festliches Smaragd- & Elfenbein-Schachbrett mit rotierenden **3D-Fanous-Laternen** auf den vier Ecksäulen und einem riesigen leuchtenden **3D-Halbmond & Stern** am Nachthimmel:
+
+![Ramadan-Edition – Palast des Goldenen Halbmondes](docs/screenshots/07-ramadan-crescent-palace.png)
+
+### 3. Neu: 🎃 Halloween-Edition („Das Spuk-Kürbis-Schloss“)
+> Kinderfreundliches Grusel-Turnier mit leuchtenden **3D-Kürbissen (Jack-o'-Lanterns)** auf den Säulen, einem **3D-Geister-Reigen**, der um das Brett schwebt, und riesigem Halloween-Vollmond:
+
+![Halloween-Edition – Das Spuk-Kürbis-Schloss](docs/screenshots/08-halloween-pumpkin-castle.png)
+
+### 4. Prinzessin Minis Schatzjagd (Kinder-Abenteuermodus)
 > 5 spielerische Missionen mit rotierenden goldenen **3D-Schatztruhen** (`🎁`) und **Lava-Hindernissen** (`🔥`), mit denen Kinder die Zugregeln von Springer, Dame, Läufer, Turm und König lernen:
 
 ![Prinzessin Minis Schatzjagd](docs/screenshots/05-treasure-hunt-mode.png)
 
-### 3. Neu in v2.0: Online-Familien-Raum (Live P2P per Raum-Code & WhatsApp-Link)
+### 5. Online-Familien-Raum (Live P2P per Raum-Code & WhatsApp-Link)
 > Ohne Account erstellen: Raum-Code (`BABA-XX`) per WhatsApp in die Familiengruppe schicken und live von überall gegeneinander spielen – inklusive **Live-Emoji-Reaktionen** über dem 3D-Schachbrett:
 
 ![Online Familien-Raum](docs/screenshots/06-online-family-room.png)
 
-### 4. Level 2 & Level 3: Kristall-Katakomben & Drachen-Schmiede
+### 6. Level 2 & Level 3: Kristall-Katakomben & Drachen-Schmiede
 ![Level 2 – Kristall-Katakomben](docs/screenshots/02-level2-crystal-catacombs.png)
 ![Level 3 – Drachen-Schmiede](docs/screenshots/03-level3-dragon-forge.png)
 
-### 5. Familien-Helden & Sprachstudio (`🎤 Echte Stimme aufnehmen`)
+### 7. Familien-Helden & Sprachstudio (`🎤 Echte Stimme aufnehmen`)
 > Im **„Familie & Stimmen“**-Menü lassen sich nicht nur alle Namen und Sprüche ändern, sondern auch **echte Mikrofon-Sprachaufnahmen** für jedes Familienmitglied aufnehmen, die beim Schlagen einer Figur abgespielt werden:
 
 ![Familien-Helden Menü](docs/screenshots/04-family-heroes-customizer.png)

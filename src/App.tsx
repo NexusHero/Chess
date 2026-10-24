@@ -864,7 +864,7 @@ export const App: React.FC = () => {
       <div className="absolute inset-0 z-0">
         <Canvas
           shadows
-          camera={{ position: [0, 6.2, 6.3], fov: 39 }}
+          camera={{ position: [0, 7.1, 7.6], fov: 42 }}
           gl={{ antialias: true, powerPreference: 'high-performance' }}
         >
           <Suspense fallback={null}>
