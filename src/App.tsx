@@ -48,6 +48,7 @@ import { FamilyHeroModal } from './components/FamilyHeroModal';
 import { OnlineRoomModal } from './components/OnlineRoomModal';
 import {
   chooseCrazyAraOrBrowserAIMove,
+  evaluateBoard,
   findHelpfulHintMove,
   STORAGE_KEY_CRAZYARA_URL,
 } from './utils/chessAI';
@@ -149,6 +150,13 @@ export const App: React.FC = () => {
   const [frozenSquares, setFrozenSquares] = useState<string[]>([]);
   const [extraTurnActive, setExtraTurnActive] = useState<boolean>(false);
   const [powerBanner, setPowerBanner] = useState<string | null>(null);
+  const [goldComebackUsed, setGoldComebackUsed] = useState<boolean>(false);
+  const [purpleComebackUsed, setPurpleComebackUsed] = useState<boolean>(false);
+  const [moveQualityBadge, setMoveQualityBadge] = useState<{
+    label: string;
+    colorClass: string;
+  } | null>(null);
+  const [isChronicleOpen, setIsChronicleOpen] = useState<boolean>(false);
 
   // Treasure Hunt Mode State (Princess Mini's Schatzjagd)
   const [questIndex, setQuestIndex] = useState<number>(0);
@@ -359,6 +367,8 @@ export const App: React.FC = () => {
       }
 
       try {
+        const evalBefore = evaluateBoard(game);
+        const moverColor = game.turn();
         const moveResult = game.move({
           from,
           to,
@@ -366,6 +376,37 @@ export const App: React.FC = () => {
         });
 
         if (!moveResult) return false;
+
+        // LiGround-inspired Move Quality Coach (Brilliant / Strong / Caution)
+        const evalAfter = evaluateBoard(game);
+        const deltaForMover =
+          moverColor === 'w'
+            ? evalAfter - evalBefore
+            : evalBefore - evalAfter;
+
+        if (game.isCheckmate()) {
+          setMoveQualityBadge({
+            label: '👑 SCHACHMATT-STREICH!',
+            colorClass: 'bg-amber-400 text-black border-yellow-200',
+          });
+        } else if (deltaForMover >= 240) {
+          setMoveQualityBadge({
+            label: '🔥 BRILLANTER MEISTERZUG! (!!)',
+            colorClass: 'bg-emerald-500 text-black border-emerald-200',
+          });
+        } else if (deltaForMover >= 95) {
+          setMoveQualityBadge({
+            label: '✨ STARKER TAKTIK-ZUG! (!)',
+            colorClass: 'bg-sky-500 text-black border-sky-200',
+          });
+        } else if (deltaForMover <= -220) {
+          setMoveQualityBadge({
+            label: '⚠️ VORSICHT: FIGUR IN GEFAHR! (?)',
+            colorClass: 'bg-rose-600 text-white border-rose-300',
+          });
+        } else {
+          setMoveQualityBadge(null);
+        }
 
         // Trigger Golden Coronation Spiral if this move was a Pawn Promotion!
         if (moveResult.promotion) {
@@ -797,6 +838,9 @@ export const App: React.FC = () => {
     setCapturedByPurple([]);
     setGoldPowerUsed(false);
     setPurplePowerUsed(false);
+    setGoldComebackUsed(false);
+    setPurpleComebackUsed(false);
+    setMoveQualityBadge(null);
     setShieldedSquares([]);
     setFrozenSquares([]);
     setExtraTurnActive(false);
@@ -837,6 +881,78 @@ export const App: React.FC = () => {
       setSelectedSquare(best.from as Square);
       setHintMove({ from: best.from as Square, to: best.to as Square });
     }
+  };
+
+  // LiGround-inspired Live Evaluation Percentage (5% to 95% Gold Win Probability)
+  const goldWinPercent = useMemo(() => {
+    if (gameMode === 'treasure') return 100;
+    const cp = evaluateBoard(gameRef.current);
+    const pct = 50 + 50 * (2 / (1 + Math.exp(-0.0032 * cp)) - 1);
+    return Math.round(Math.min(96, Math.max(4, pct)));
+  }, [fen, gameMode]);
+
+  // Crazyhouse / LiGround "Familien-Comeback": Parachute-drop 1 captured family hero back onto a safe home square!
+  const handleParachuteComeback = (teamColor: 'w' | 'b', role: PieceRole, indexInPocket: number) => {
+    const game = gameRef.current;
+    if (game.isGameOver() || isAIThinking || gameMode === 'treasure') return;
+    if (game.turn() !== teamColor) {
+      showTemporaryBanner('⏳ Du kannst das Familien-Comeback nur in deinem eigenen Zug rufen!');
+      return;
+    }
+    if ((teamColor === 'w' && goldComebackUsed) || (teamColor === 'b' && purpleComebackUsed)) {
+      return;
+    }
+
+    const candidateRanks = teamColor === 'w' ? ['2', '3', '4', '1'] : ['7', '6', '5', '8'];
+    const candidateFiles = ['d', 'e', 'c', 'f', 'b', 'g', 'a', 'h'];
+    let targetSq: Square | null = null;
+
+    for (const r of candidateRanks) {
+      if (role === 'p' && (r === '1' || r === '8')) continue;
+      for (const f of candidateFiles) {
+        const sq = `${f}${r}` as Square;
+        if (!game.get(sq)) {
+          game.put({ type: role, color: teamColor }, sq);
+          // Verify this drop doesn't leave own King in check
+          const fenParts = game.fen().split(' ');
+          fenParts[1] = teamColor === 'w' ? 'b' : 'w';
+          fenParts[3] = '-';
+          try {
+            const testChess = new Chess(fenParts.join(' '));
+            targetSq = sq;
+            game.load(testChess.fen());
+            break;
+          } catch {
+            game.remove(sq);
+          }
+        }
+      }
+      if (targetSq) break;
+    }
+
+    if (!targetSq) {
+      showTemporaryBanner('⚠️ Kein freies Landefeld für den Fallschirm gefunden!');
+      return;
+    }
+
+    if (teamColor === 'w') {
+      setGoldComebackUsed(true);
+      setCapturedByPurple((prev) => prev.filter((_, idx) => idx !== indexInPocket));
+    } else {
+      setPurpleComebackUsed(true);
+      setCapturedByGold((prev) => prev.filter((_, idx) => idx !== indexInPocket));
+    }
+
+    setFen(game.fen());
+    setPromotedSquare(targetSq);
+    setLastMove({ from: targetSq, to: targetSq });
+    soundFX.playSuperpower();
+    showTemporaryBanner(
+      `🪂 CRAZYHOUSE-COMEBACK! ${heroes[role].customName} landet per Fallschirm wieder auf ${targetSq.toUpperCase()}!`
+    );
+    setTimeout(() => {
+      setPromotedSquare((prev) => (prev === targetSq ? null : prev));
+    }, 3200);
   };
 
   const turnColor = gameRef.current.turn();
@@ -1170,7 +1286,36 @@ export const App: React.FC = () => {
                 SCHACH!
               </span>
             )}
+
+            {moveQualityBadge && gameMode !== 'treasure' && (
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border shadow-md animate-pulse ${moveQualityBadge.colorClass}`}
+              >
+                {moveQualityBadge.label}
+              </span>
+            )}
           </div>
+
+          {/* LiGround-Style Live Power Balance Bar (Gold vs. Kristall-Violett) */}
+          {gameMode !== 'treasure' && (
+            <div
+              className="pointer-events-auto flex items-center gap-2 w-64 sm:w-80 px-2.5 py-1 rounded-full bg-black/75 border border-white/15 backdrop-blur-md shadow-lg"
+              title="LiGround Live-Stellungsbewertung: Zeigt, welches Team gerade im Vorteil ist"
+            >
+              <span className="text-[10px] font-extrabold text-amber-300 shrink-0">
+                ☀️ {goldWinPercent}%
+              </span>
+              <div className="flex-1 h-2 rounded-full bg-purple-950 overflow-hidden flex border border-white/10">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-400 to-yellow-300 transition-all duration-500"
+                  style={{ width: `${goldWinPercent}%` }}
+                />
+              </div>
+              <span className="text-[10px] font-extrabold text-purple-300 shrink-0">
+                {100 - goldWinPercent}% 🌙
+              </span>
+            </div>
+          )}
 
           {/* Treasure Quest Switcher Bar */}
           {gameMode === 'treasure' && (
@@ -1274,26 +1419,72 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* Captured Pieces & Level Info Pill */}
+          {/* Captured Pieces, Crazyhouse Parachute Comeback & Move Chronicle Pill */}
           <div className="hidden md:flex flex-col items-end gap-1.5 pointer-events-auto">
-            <div className="px-3.5 py-2 rounded-2xl bg-black/75 border border-white/15 backdrop-blur-md text-right">
-              <div className="text-[10px] uppercase tracking-wider text-amber-300 font-bold">
-                {currentLevel.difficultyLabel}
+            {isChronicleOpen && moveHistory.length > 0 && (
+              <div className="w-64 max-h-40 overflow-y-auto p-3 rounded-2xl bg-black/90 border border-amber-400/50 backdrop-blur-md text-xs text-amber-100 shadow-2xl space-y-1">
+                <div className="flex items-center justify-between border-b border-white/15 pb-1 mb-1">
+                  <span className="font-extrabold text-amber-300 uppercase text-[10px]">
+                    📜 LiGround Zug-Chronik
+                  </span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText(gameRef.current.pgn());
+                      showTemporaryBanner('📋 PGN-Zug-Chronik in die Zwischenablage kopiert!');
+                    }}
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-200 font-bold"
+                  >
+                    PGN kopieren
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] font-mono">
+                  {moveHistory.map((san, idx) => (
+                    <div key={idx} className="truncate">
+                      {idx % 2 === 0 ? (
+                        <span className="text-amber-400/70 mr-1">
+                          {Math.floor(idx / 2) + 1}.
+                        </span>
+                      ) : null}
+                      <span className={idx % 2 === 0 ? 'text-amber-200' : 'text-purple-300'}>
+                        {san}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center justify-end gap-3 mt-1 text-xs">
+            )}
+
+            <div className="px-3.5 py-2 rounded-2xl bg-black/75 border border-white/15 backdrop-blur-md text-right space-y-1">
+              <div className="flex items-center justify-end gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-amber-300 font-bold">
+                  {currentLevel.difficultyLabel}
+                </span>
+                {moveHistory.length > 0 && (
+                  <button
+                    onClick={() => setIsChronicleOpen((v) => !v)}
+                    className="px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/20 text-[10px] font-bold text-amber-200"
+                    title="Zug-Chronik ein-/ausblenden"
+                  >
+                    📜 {moveHistory.length} Züge
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-3 text-xs">
                 <div>
                   <span className="text-amber-300 font-bold">☀️ Beute: </span>
                   {capturedByGold.length === 0 ? (
                     <span className="opacity-40">–</span>
                   ) : (
                     capturedByGold.map((r, i) => (
-                      <span
+                      <button
                         key={i}
-                        className="mr-0.5"
-                        title={heroes[r].customName}
+                        onClick={() => handleParachuteComeback('b', r, i)}
+                        disabled={purpleComebackUsed || turnColor !== 'b'}
+                        className="mr-0.5 px-1 rounded bg-amber-500/20 hover:bg-amber-400 hover:text-black transition disabled:opacity-60"
+                        title={`${heroes[r].customName} (Klicke für Crazyhouse-Fallschirm-Comeback!)`}
                       >
                         {heroes[r].chessName[0]}
-                      </span>
+                      </button>
                     ))
                   )}
                 </div>
@@ -1303,13 +1494,19 @@ export const App: React.FC = () => {
                     <span className="opacity-40">–</span>
                   ) : (
                     capturedByPurple.map((r, i) => (
-                      <span
+                      <button
                         key={i}
-                        className="mr-0.5"
-                        title={heroes[r].customName}
+                        onClick={() => handleParachuteComeback('w', r, i)}
+                        disabled={goldComebackUsed || turnColor !== 'w'}
+                        className="mr-0.5 px-1 rounded bg-purple-500/20 hover:bg-amber-400 hover:text-black transition disabled:opacity-60"
+                        title={
+                          !goldComebackUsed
+                            ? `🪂 Klicke, um ${heroes[r].customName} per Fallschirm zurück aufs Brett zu rufen (1x pro Spiel)!`
+                            : heroes[r].customName
+                        }
                       >
                         {heroes[r].chessName[0]}
-                      </span>
+                      </button>
                     ))
                   )}
                 </div>
