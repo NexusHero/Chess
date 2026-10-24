@@ -7,6 +7,7 @@ import {
   DungeonLevelConfig,
   FamilyHeroConfig,
   PieceRole,
+  SpecialThemeType,
 } from '../data/familyConfig';
 import { FamilyHeroPiece3D } from './FamilyHeroPiece3D';
 
@@ -67,18 +68,30 @@ const TorchPillar: React.FC<{
   position: [number, number, number];
   pillarColor: string;
   flameColor: string;
-}> = ({ position, pillarColor, flameColor }) => {
+  specialTheme?: SpecialThemeType;
+}> = ({ position, pillarColor, flameColor, specialTheme = 'default' }) => {
   const flameRef = useRef<THREE.Mesh>(null);
+  const lanternRef = useRef<THREE.Group>(null);
+  const pumpkinRef = useRef<THREE.Group>(null);
   const lightRef = useRef<THREE.PointLight>(null);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime + position[0] * 1.3;
     if (flameRef.current) {
       const s = 1 + Math.sin(t * 9) * 0.14 + Math.cos(t * 15) * 0.08;
       flameRef.current.scale.set(s, s * 1.25, s);
     }
+    if (lanternRef.current) {
+      lanternRef.current.rotation.y += delta * 0.8;
+      lanternRef.current.position.y = 2.45 + Math.sin(t * 2.5) * 0.08;
+    }
+    if (pumpkinRef.current) {
+      const bounce = 1 + Math.sin(t * 4) * 0.05;
+      pumpkinRef.current.scale.set(bounce, bounce, bounce);
+      pumpkinRef.current.rotation.y = Math.sin(t * 1.5) * 0.25;
+    }
     if (lightRef.current) {
-      lightRef.current.intensity = 1.9 + Math.sin(t * 11) * 0.35;
+      lightRef.current.intensity = 2.1 + Math.sin(t * 11) * 0.35;
     }
   });
 
@@ -94,12 +107,92 @@ const TorchPillar: React.FC<{
       </mesh>
       <mesh position={[0, 2.08, 0]} castShadow>
         <cylinderGeometry args={[0.45, 0.25, 0.24, 8]} />
-        <meshStandardMaterial color="#27272a" roughness={0.4} metalness={0.8} />
+        <meshStandardMaterial
+          color={specialTheme === 'ramadan' ? '#d97706' : '#27272a'}
+          roughness={0.35}
+          metalness={0.85}
+        />
       </mesh>
-      <mesh ref={flameRef} position={[0, 2.38, 0]}>
-        <dodecahedronGeometry args={[0.24, 1]} />
-        <meshBasicMaterial color={flameColor} />
-      </mesh>
+
+      {specialTheme === 'ramadan' ? (
+        /* Golden 3D Ramadan Fanous Lantern */
+        <group ref={lanternRef} position={[0, 2.45, 0]}>
+          {/* Warm Glowing Glass Core */}
+          <mesh>
+            <cylinderGeometry args={[0.22, 0.16, 0.48, 6]} />
+            <meshStandardMaterial
+              color="#fef08a"
+              emissive="#fbbf24"
+              emissiveIntensity={1.2}
+              transparent
+              opacity={0.9}
+            />
+          </mesh>
+          {/* Ornate Gold Cage Frame */}
+          <mesh>
+            <cylinderGeometry args={[0.25, 0.18, 0.5, 6]} />
+            <meshStandardMaterial
+              color="#f59e0b"
+              metalness={0.9}
+              roughness={0.2}
+              wireframe
+            />
+          </mesh>
+          {/* Lantern Dome Roof */}
+          <mesh position={[0, 0.32, 0]}>
+            <coneGeometry args={[0.28, 0.24, 6]} />
+            <meshStandardMaterial
+              color="#d97706"
+              metalness={0.85}
+              roughness={0.2}
+            />
+          </mesh>
+          {/* Little Crescent Finial on Top */}
+          <mesh position={[0, 0.48, 0]}>
+            <torusGeometry args={[0.07, 0.02, 8, 16, Math.PI * 1.4]} />
+            <meshBasicMaterial color="#fde047" />
+          </mesh>
+        </group>
+      ) : specialTheme === 'halloween' ? (
+        /* Glowing 3D Halloween Jack-o'-Lantern Pumpkin */
+        <group ref={pumpkinRef} position={[0, 2.42, 0]}>
+          {/* Pumpkin Ribbed Body */}
+          <mesh castShadow scale={[1, 0.82, 1]}>
+            <sphereGeometry args={[0.38, 12, 10]} />
+            <meshStandardMaterial
+              color="#ea580c"
+              emissive="#f97316"
+              emissiveIntensity={0.45}
+              roughness={0.5}
+            />
+          </mesh>
+          {/* Green Pumpkin Stem */}
+          <mesh position={[0, 0.34, 0]} rotation={[0, 0, 0.2]}>
+            <cylinderGeometry args={[0.04, 0.07, 0.18, 6]} />
+            <meshStandardMaterial color="#15803d" roughness={0.6} />
+          </mesh>
+          {/* Glowing Carved Eyes & Smile */}
+          <mesh position={[-0.12, 0.06, 0.33]}>
+            <coneGeometry args={[0.07, 0.12, 3]} />
+            <meshBasicMaterial color="#fef08a" />
+          </mesh>
+          <mesh position={[0.12, 0.06, 0.33]}>
+            <coneGeometry args={[0.07, 0.12, 3]} />
+            <meshBasicMaterial color="#fef08a" />
+          </mesh>
+          <mesh position={[0, -0.09, 0.34]} rotation={[Math.PI, 0, 0]}>
+            <torusGeometry args={[0.12, 0.035, 6, 12, Math.PI]} />
+            <meshBasicMaterial color="#fde047" />
+          </mesh>
+        </group>
+      ) : (
+        /* Default Dungeon Torch Flame */
+        <mesh ref={flameRef} position={[0, 2.38, 0]}>
+          <dodecahedronGeometry args={[0.24, 1]} />
+          <meshBasicMaterial color={flameColor} />
+        </mesh>
+      )}
+
       <pointLight
         ref={lightRef}
         position={[0, 2.6, 0]}
@@ -110,6 +203,126 @@ const TorchPillar: React.FC<{
       />
     </group>
   );
+};
+
+// Special 3D Sky & Arena Decorations for Ramadan (Crescent Moon + Hanging Fanous) & Halloween (Floating Ghosts + Giant Pumpkin Moon)
+const SpecialThemeSky3D: React.FC<{ specialTheme?: SpecialThemeType }> = ({
+  specialTheme,
+}) => {
+  const moonGroupRef = useRef<THREE.Group>(null);
+  const ghostsGroupRef = useRef<THREE.Group>(null);
+
+  useFrame((state, delta) => {
+    if (moonGroupRef.current) {
+      moonGroupRef.current.rotation.y =
+        Math.sin(state.clock.elapsedTime * 0.6) * 0.2;
+      moonGroupRef.current.position.y =
+        4.6 + Math.sin(state.clock.elapsedTime * 1.5) * 0.15;
+    }
+    if (ghostsGroupRef.current) {
+      ghostsGroupRef.current.rotation.y += delta * 0.45;
+    }
+  });
+
+  if (specialTheme === 'ramadan') {
+    return (
+      <group>
+        {/* Giant Glowing 3D Golden Crescent Moon & Star behind the board */}
+        <group ref={moonGroupRef} position={[0, 4.6, -6.2]}>
+          <mesh rotation={[0, 0, Math.PI * 0.15]}>
+            <torusGeometry args={[1.35, 0.24, 16, 48, Math.PI * 1.35]} />
+            <meshStandardMaterial
+              color="#fde047"
+              emissive="#f59e0b"
+              emissiveIntensity={0.95}
+              metalness={0.85}
+              roughness={0.15}
+            />
+          </mesh>
+          {/* 3D Star inside the Crescent */}
+          <mesh position={[0.55, 0.35, 0]}>
+            <octahedronGeometry args={[0.34, 0]} />
+            <meshStandardMaterial
+              color="#fef08a"
+              emissive="#fbbf24"
+              emissiveIntensity={1.1}
+            />
+          </mesh>
+          <Html position={[0, -1.75, 0]} center zIndexRange={[5, 0]}>
+            <div className="pointer-events-none px-3 py-1 rounded-full bg-emerald-950/90 border border-amber-400 text-amber-200 text-xs font-extrabold shadow-lg whitespace-nowrap">
+              🌙 Ramadan Mubarak • Familien-Schachabend ✨
+            </div>
+          </Html>
+        </group>
+      </group>
+    );
+  }
+
+  if (specialTheme === 'halloween') {
+    return (
+      <group>
+        {/* Orbiting Friendly 3D Halloween Ghosts & Spooky Banner */}
+        <group ref={ghostsGroupRef} position={[0, 2.2, 0]}>
+          {[0, 1, 2, 3].map((i) => {
+            const angle = (i * Math.PI) / 2;
+            const radius = 5.6;
+            return (
+              <group
+                key={i}
+                position={[
+                  Math.cos(angle) * radius,
+                  Math.sin(i * 2) * 0.4,
+                  Math.sin(angle) * radius,
+                ]}
+              >
+                {/* Ghost Head & Cloak */}
+                <mesh position={[0, 0.25, 0]}>
+                  <sphereGeometry args={[0.26, 12, 12]} />
+                  <meshStandardMaterial
+                    color="#f8fafc"
+                    emissive="#c084fc"
+                    emissiveIntensity={0.35}
+                    transparent
+                    opacity={0.82}
+                  />
+                </mesh>
+                <mesh position={[0, -0.05, 0]}>
+                  <coneGeometry args={[0.28, 0.45, 10, 1, true]} />
+                  <meshStandardMaterial
+                    color="#f8fafc"
+                    emissive="#a855f7"
+                    emissiveIntensity={0.35}
+                    transparent
+                    opacity={0.75}
+                    side={THREE.DoubleSide}
+                  />
+                </mesh>
+              </group>
+            );
+          })}
+        </group>
+
+        {/* Giant Harvest Moon behind the board */}
+        <group ref={moonGroupRef} position={[0, 4.6, -6.4]}>
+          <mesh>
+            <sphereGeometry args={[1.25, 24, 24]} />
+            <meshStandardMaterial
+              color="#fb923c"
+              emissive="#ea580c"
+              emissiveIntensity={0.85}
+            />
+          </mesh>
+          <Html position={[0, -1.65, 0]} center zIndexRange={[5, 0]}>
+            <div className="pointer-events-none px-3 py-1 rounded-full bg-purple-950/90 border border-orange-400 text-orange-200 text-xs font-extrabold shadow-lg whitespace-nowrap">
+              🎃 Happy Halloween • Grusel-Schloss-Turnier 👻
+            </div>
+          </Html>
+        </group>
+      </group>
+    );
+  }
+
+  return null;
 };
 
 // Golden 3D Treasure Chest for Princess Mini's Treasure Hunt Mode
@@ -532,27 +745,34 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
         />
       </mesh>
 
-      {/* 4 Corner Dungeon Torch Pillars */}
+      {/* 4 Corner Dungeon / Ramadan Fanous / Halloween Pumpkin Pillars */}
       <TorchPillar
         position={[-5.1, -0.2, -5.1]}
         pillarColor={level.theme.pillarColor}
         flameColor={level.theme.torchColor}
+        specialTheme={level.specialTheme}
       />
       <TorchPillar
         position={[5.1, -0.2, -5.1]}
         pillarColor={level.theme.pillarColor}
         flameColor={level.theme.torchColor}
+        specialTheme={level.specialTheme}
       />
       <TorchPillar
         position={[-5.1, -0.2, 5.1]}
         pillarColor={level.theme.pillarColor}
         flameColor={level.theme.torchColor}
+        specialTheme={level.specialTheme}
       />
       <TorchPillar
         position={[5.1, -0.2, 5.1]}
         pillarColor={level.theme.pillarColor}
         flameColor={level.theme.torchColor}
+        specialTheme={level.specialTheme}
       />
+
+      {/* Special 3D Sky Elements for Ramadan & Halloween */}
+      <SpecialThemeSky3D specialTheme={level.specialTheme} />
 
       {/* Coordinate Runes along the board edges */}
       {FILES.map((file, idx) => (

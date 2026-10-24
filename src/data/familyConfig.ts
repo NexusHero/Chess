@@ -33,8 +33,14 @@ export interface FamilyHeroConfig {
   superpower: SuperpowerConfig;
 }
 
+export type DungeonLevelId = 1 | 2 | 3 | 4 | 5;
+export type SpecialThemeType = 'default' | 'ramadan' | 'halloween';
+
 export interface DungeonLevelConfig {
-  id: 1 | 2 | 3;
+  id: DungeonLevelId;
+  shortLabel: string;
+  badgeEmoji: string;
+  specialTheme?: SpecialThemeType;
   name: string;
   subtitle: string;
   bossName: string;
@@ -298,6 +304,9 @@ export const DEFAULT_FAMILY_HEROES: Record<PieceRole, FamilyHeroConfig> = {
 export const DUNGEON_LEVELS: DungeonLevelConfig[] = [
   {
     id: 1,
+    shortLabel: 'Level 1',
+    badgeEmoji: '⚔️',
+    specialTheme: 'default',
     name: 'Level 1: Die Königliche Tor-Halle',
     subtitle: 'Warmes Fackellicht & Sandstein-Säulen (Berlin-Hommage)',
     bossName: 'Wächter des Brandenburger Gewölbes',
@@ -324,6 +333,9 @@ export const DUNGEON_LEVELS: DungeonLevelConfig[] = [
   },
   {
     id: 2,
+    shortLabel: 'Level 2',
+    badgeEmoji: '💎',
+    specialTheme: 'default',
     name: 'Level 2: Die Kristall-Katakomben',
     subtitle: 'Schwebende Manakristalle & Mystischer Runennebel',
     bossName: 'Erz-Illusionist der Saphir-Tiefe',
@@ -350,6 +362,9 @@ export const DUNGEON_LEVELS: DungeonLevelConfig[] = [
   },
   {
     id: 3,
+    shortLabel: 'Level 3',
+    badgeEmoji: '🐉',
+    specialTheme: 'default',
     name: 'Level 3: Die Drachen-Schmiede',
     subtitle: 'Glühende Lava-Risse, Funkenregen & Thronsaal',
     bossName: 'Großmeister der Obsidian-Zitadelle',
@@ -372,6 +387,64 @@ export const DUNGEON_LEVELS: DungeonLevelConfig[] = [
       particleColor: '#fb7185',
       floorColor: '#170707',
       pillarColor: '#292524',
+    },
+  },
+  {
+    id: 4,
+    shortLabel: '🌙 Ramadan',
+    badgeEmoji: '🌙',
+    specialTheme: 'ramadan',
+    name: 'Ramadan-Edition: Palast des Goldenen Halbmondes',
+    subtitle: 'Leuchtende Fanous-Laternen, Halbmond-Himmel & Iftar-Festglanz',
+    bossName: 'Hüter der Goldenen Mondsichel',
+    bossTitle: 'Festlicher Großwesir der Sternennacht',
+    difficultyLabel: 'Fest-Spezial • Für gemütliche Familien-Abende',
+    aiDepth: 2,
+    aiRandomness: 0.3,
+    description:
+      'Über dem kunstvoll verzierten Smaragd- und Elfenbein-Schachbrett schwebt ein riesiger goldener 3D-Halbmond mit Stern, während an den vier Ecksäulen festliche Ramadan-Laternen (Fanous) leuchten!',
+    theme: {
+      bgGradient: 'radial-gradient(circle at 50% 20%, #063940 0%, #041421 60%, #020810 100%)',
+      fogColor: '#041824',
+      ambientColor: '#fef08a',
+      ambientIntensity: 0.9,
+      torchColor: '#fbbf24',
+      lightTileColor: '#fef3c7',
+      darkTileColor: '#065f46',
+      boardTrimColor: '#d97706',
+      runeGlowColor: '#fcd34d',
+      particleColor: '#fde047',
+      floorColor: '#042f2e',
+      pillarColor: '#0f766e',
+    },
+  },
+  {
+    id: 5,
+    shortLabel: '🎃 Halloween',
+    badgeEmoji: '🎃',
+    specialTheme: 'halloween',
+    name: 'Halloween-Edition: Das Spuk-Kürbis-Schloss',
+    subtitle: 'Leuchtende 3D-Kürbisse, Geister-Reigen & Magisches Grusel-Schach',
+    bossName: 'Graf Kürbiskopf von Schlotterstein',
+    bossTitle: 'Lustiger Spuk-Baron der Mitternacht',
+    difficultyLabel: 'Grusel-Spaß • Kinderfreundliches Halloween-Event',
+    aiDepth: 2,
+    aiRandomness: 0.3,
+    description:
+      'An den vier Ecken grinsen leuchtende 3D-Halloween-Kürbisse, kleine freundliche Geister schweben im Kreis um das Brett und die Felder schimmern in Kürbis-Orange und Mitternachts-Violett!',
+    theme: {
+      bgGradient: 'radial-gradient(circle at 50% 25%, #3b0764 0%, #1a0526 60%, #09020f 100%)',
+      fogColor: '#170524',
+      ambientColor: '#fdba74',
+      ambientIntensity: 0.78,
+      torchColor: '#f97316',
+      lightTileColor: '#fdba74',
+      darkTileColor: '#2e1065',
+      boardTrimColor: '#ea580c',
+      runeGlowColor: '#a3e635',
+      particleColor: '#fb923c',
+      floorColor: '#180629',
+      pillarColor: '#3b0764',
     },
   },
 ];

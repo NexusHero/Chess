@@ -33,6 +33,7 @@ import {
 import {
   DEFAULT_FAMILY_HEROES,
   DUNGEON_LEVELS,
+  DungeonLevelId,
   FamilyHeroConfig,
   PieceRole,
   TREASURE_QUESTS,
@@ -90,7 +91,7 @@ export const App: React.FC = () => {
     }
   );
 
-  // 2. Stars/Crowns earned per Dungeon Level (1, 2, 3) + Eternal Family Scoreboard
+  // 2. Stars/Crowns earned per Dungeon Level (1-5) + Eternal Family Scoreboard
   const [levelStars, setLevelStars] = useState<Record<number, number>>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_STARS);
@@ -98,7 +99,7 @@ export const App: React.FC = () => {
     } catch {
       // ignore
     }
-    return { 1: 0, 2: 0, 3: 0 };
+    return { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
   });
 
   const [scoreboard, setScoreboard] = useState<FamilyScoreboard>(() => {
@@ -119,7 +120,7 @@ export const App: React.FC = () => {
   } | null>(null);
   const [promotedSquare, setPromotedSquare] = useState<Square | null>(null);
 
-  const [currentLevelId, setCurrentLevelId] = useState<1 | 2 | 3>(1);
+  const [currentLevelId, setCurrentLevelId] = useState<DungeonLevelId>(1);
   const currentLevel = useMemo(
     () =>
       DUNGEON_LEVELS.find((l) => l.id === currentLevelId) || DUNGEON_LEVELS[0],
@@ -943,11 +944,13 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {/* 3 Dungeon Levels Selector with Stars/Crowns */}
-        <div className="flex items-center gap-1 bg-black/60 p-1 rounded-2xl border border-amber-500/30 backdrop-blur-md">
+        {/* 3 Dungeon Levels + Ramadan & Halloween Special Themes Selector */}
+        <div className="flex items-center gap-1 bg-black/60 p-1 rounded-2xl border border-amber-500/30 backdrop-blur-md flex-wrap">
           {DUNGEON_LEVELS.map((lvl) => {
             const active = lvl.id === currentLevelId;
             const stars = levelStars[lvl.id] || 0;
+            const isRamadan = lvl.specialTheme === 'ramadan';
+            const isHalloween = lvl.specialTheme === 'halloween';
             return (
               <button
                 key={lvl.id}
@@ -957,13 +960,21 @@ export const App: React.FC = () => {
                 }}
                 className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
                   active
-                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-md'
+                    ? isRamadan
+                      ? 'bg-gradient-to-r from-emerald-500 to-amber-400 text-black shadow-md'
+                      : isHalloween
+                      ? 'bg-gradient-to-r from-orange-500 to-purple-600 text-white shadow-md'
+                      : 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-md'
+                    : isRamadan
+                    ? 'text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/30'
+                    : isHalloween
+                    ? 'text-orange-300 hover:bg-orange-500/20 border border-orange-500/30'
                     : 'text-amber-100/75 hover:bg-white/10'
                 }`}
               >
-                <span>Level {lvl.id}</span>
+                <span>{lvl.shortLabel}</span>
                 <span className="text-[10px]">
-                  {stars > 0 ? '👑'.repeat(stars) : '⚔️'}
+                  {stars > 0 ? '👑'.repeat(stars) : lvl.badgeEmoji}
                 </span>
               </button>
             );
@@ -1472,15 +1483,17 @@ export const App: React.FC = () => {
                   Nächste Schatz-Mission →
                 </button>
               )}
-              {!isTreasureComplete && currentLevelId < 3 && (
+              {!isTreasureComplete && currentLevelId < 5 && (
                 <button
                   onClick={() => {
-                    setCurrentLevelId((prev) => (prev === 1 ? 2 : 3));
+                    setCurrentLevelId(
+                      (prev) => Math.min(5, prev + 1) as DungeonLevelId
+                    );
                     handleNewGame();
                   }}
                   className="px-5 py-2.5 rounded-xl font-bold text-sm bg-purple-600 hover:bg-purple-500 text-white border border-purple-300/40"
                 >
-                  Nächstes Dungeon-Level →
+                  Nächste Welt →
                 </button>
               )}
             </div>
