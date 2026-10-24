@@ -296,16 +296,37 @@ export const App: React.FC = () => {
       const randomQuote =
         quotes[Math.floor(Math.random() * quotes.length)] || heroCfg.battleCry;
 
+      // Check if defender is the 2nd Cousin skin on an odd file!
+      const toFileIdx = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].indexOf(
+        move.to[0]
+      );
+      const fromFileIdx = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].indexOf(
+        move.from[0]
+      );
+      const attackerSprite =
+        attackerRole === 'p' &&
+        fromFileIdx % 2 === 1 &&
+        heroCfg.secondarySpritePath
+          ? heroCfg.secondarySpritePath
+          : heroCfg.spritePath;
+      const defenderSprite =
+        defenderRole === 'p' &&
+        toFileIdx % 2 === 1 &&
+        defCfg.secondarySpritePath
+          ? defCfg.secondarySpritePath
+          : defCfg.spritePath;
+
       setCaptureEffect({
         id: `${Date.now()}-${move.to}`,
+        fromSquare: move.from as Square,
         square: move.to as Square,
         attackerName: heroCfg.customName,
         attackerRole,
         attackerColor: move.color,
         defenderName: defCfg.customName,
         defenderRole,
-        attackerSprite: heroCfg.spritePath,
-        defenderSprite: defCfg.spritePath,
+        attackerSprite,
+        defenderSprite,
         quote: randomQuote,
         accentColor: heroCfg.accentColor,
       });

@@ -24,6 +24,7 @@ export type CameraPreset = 'orbit' | 'top' | 'table-white' | 'table-black';
 
 export interface ActiveCaptureEffect {
   id: string;
+  fromSquare: Square;
   square: Square;
   attackerName: string;
   attackerRole: PieceRole;
@@ -520,141 +521,415 @@ const LavaObstacle3D: React.FC<{ square: string }> = ({ square }) => {
   );
 };
 
-// Battle-Chess 3D Clash Duel Effect + Ascending 3D Parachute Retreat + Speech Bubble
+// AAA Art-Director 3D Battle-Chess Choreography:
+// Phase 1 (0.00-0.25s): Attacker windup & class-specific spell/weapon impact
+// Phase 2 (0.25-0.45s): White-gold hit-stop flash + defender hit-recoil & ground crater shockwave
+// Phase 3 (0.45-3.10s): Defender pops out of their crumbling stone pedestal and floats visibly under a 3D royal silk parachute toward the spectator sideline!
 const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
   effect,
 }) => {
-  const ringRef = useRef<THREE.Mesh>(null);
-  const beamRef = useRef<THREE.Mesh>(null);
-  const parachuteGroupRef = useRef<THREE.Group>(null);
-  const slashSwordRef = useRef<THREE.Group>(null);
-  const pos = useMemo(() => squareToWorld(effect.square), [effect.square]);
+  const elapsed = useRef(0);
+  const shockwaveRingRef = useRef<THREE.Mesh>(null);
+  const innerBurstRef = useRef<THREE.Mesh>(null);
+  const weaponGroupRef = useRef<THREE.Group>(null);
+  const defenderGroupRef = useRef<THREE.Group>(null);
+  const parachuteCanopyRef = useRef<THREE.Group>(null);
+  const debrisGroupRef = useRef<THREE.Group>(null);
+  const flashLightRef = useRef<THREE.PointLight>(null);
 
-  // Role-specific 3D weapon / magic projectile
-  const isMagicAttacker =
-    effect.attackerRole === 'q' || effect.attackerRole === 'b';
+  const glowTex = useMemo(() => getGlowHaloTexture(), []);
+  const defenderPngPath = useMemo(
+    () => effect.defenderSprite.replace('.jpg', '.png'),
+    [effect.defenderSprite]
+  );
+  const defenderTexture = useTexture(defenderPngPath);
+  defenderTexture.colorSpace = THREE.SRGBColorSpace;
+
+  const pos = useMemo(() => squareToWorld(effect.square), [effect.square]);
+  const fromPos = useMemo(
+    () =>
+      effect.fromSquare ? squareToWorld(effect.fromSquare) : [pos[0], 0, pos[2] + 1],
+    [effect.fromSquare, pos]
+  );
+
+  // Compute knockback direction vector (from attacker toward defender & sideline)
+  const knockDir = useMemo(() => {
+    const dx = pos[0] - fromPos[0];
+    const dz = pos[2] - fromPos[2];
+    const len = Math.hypot(dx, dz) || 1;
+    return [dx / len, dz / len] as [number, number];
+  }, [pos, fromPos]);
+
+  // Sideline target X where captured pieces sit (Gold captures go left -4.75, Purple captures go right +4.75)
+  const sidelineTargetX = effect.attackerColor === 'w' ? -4.75 - pos[0] : 4.75 - pos[0];
+
+  // Role-specific class signature color & title
+  const classSignature = useMemo(() => {
+    switch (effect.attackerRole) {
+      case 'k':
+        return { color: '#fbbf24', secondary: '#fef08a', badge: '👑 KÖNIGLICHER EXCALIBUR-SPALT' };
+      case 'q':
+        return { color: '#c084fc', secondary: '#f472b6', badge: '🔮 ARKANE SUPERNOVA' };
+      case 'b':
+        return { color: '#38bdf8', secondary: '#bae6fd', badge: '❄️ SAPHIR-EISKRISTALL-BLITZ' };
+      case 'n':
+        return { color: '#fb7185', secondary: '#fda4af', badge: '🦄 WIRBELWIND-STOSS' };
+      case 'r':
+        return { color: '#f97316', secondary: '#fdba74', badge: '🏰 FESTUNGS-ERDBEBEN' };
+      default:
+        return { color: '#34d399', secondary: '#a7f3d0', badge: '🗡️ ZWILLINGS-DOLCH-BLITZ' };
+    }
+  }, [effect.attackerRole]);
+
+  // 8 deterministic flying stone/crystal debris chunks on impact
+  const debrisChunks = useMemo(() => {
+    return Array.from({ length: 8 }, (_, i) => {
+      const angle = (i * Math.PI * 2) / 8 + 0.2;
+      const speed = 1.2 + (i % 3) * 0.45;
+      return {
+        vx: Math.cos(angle) * speed,
+        vy: 2.1 + (i % 2) * 0.8,
+        vz: Math.sin(angle) * speed,
+        scale: 0.07 + (i % 3) * 0.025,
+      };
+    });
+  }, []);
 
   useFrame((state, delta) => {
-    if (ringRef.current) {
-      ringRef.current.scale.x += delta * 5.2;
-      ringRef.current.scale.y += delta * 5.2;
-      const mat = ringRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = Math.max(0, mat.opacity - delta * 0.75);
+    elapsed.current += delta;
+    const t = elapsed.current;
+
+    // 1. Expanding Ground Crater Shockwave Ring
+    if (shockwaveRingRef.current) {
+      const s = 1 + Math.min(1, t / 0.85) * 3.8;
+      shockwaveRingRef.current.scale.set(s, s, 1);
+      const mat = shockwaveRingRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = Math.max(0, 1 - t / 0.85);
     }
-    if (beamRef.current) {
-      beamRef.current.rotation.y += delta * 6;
-      const mat = beamRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = Math.max(0, mat.opacity - delta * 0.45);
+
+    // 2. Additive Impact Flash Burst (peaks at t=0.18s, fades smoothly)
+    if (innerBurstRef.current) {
+      const burstScale = t < 0.2 ? 0.5 + (t / 0.2) * 2.4 : 2.9 + (t - 0.2) * 0.8;
+      innerBurstRef.current.scale.set(burstScale, burstScale, 1);
+      const mat = innerBurstRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = t < 0.2 ? t / 0.2 : Math.max(0, 1 - (t - 0.2) / 0.65);
     }
-    // 3D Parachute gently floating upward into the sky and swaying
-    if (parachuteGroupRef.current) {
-      parachuteGroupRef.current.position.y += delta * 1.15;
-      parachuteGroupRef.current.rotation.z =
-        Math.sin(state.clock.elapsedTime * 5) * 0.18;
-      parachuteGroupRef.current.rotation.y += delta * 1.2;
+
+    if (flashLightRef.current) {
+      flashLightRef.current.intensity =
+        t < 0.25 ? 6.5 : Math.max(0, 6.5 * (1 - (t - 0.25) / 0.8));
     }
-    // 3D Sword / Arcane Slash swing animation
-    if (slashSwordRef.current) {
-      slashSwordRef.current.rotation.z += delta * 9.5;
-      slashSwordRef.current.rotation.y += delta * 4.5;
+
+    // 3. Class-Specific 3D Weapon / Spell Animation
+    if (weaponGroupRef.current) {
+      weaponGroupRef.current.rotation.y += delta * 6.5;
+      weaponGroupRef.current.rotation.z = Math.sin(t * 14) * 0.35;
+      const wScale = t < 0.18 ? t / 0.18 : Math.max(0, 1 - (t - 0.18) / 0.85);
+      weaponGroupRef.current.scale.setScalar(wScale);
+    }
+
+    // 4. Flying 3D Stone & Gem Debris Physics (parabolic gravity arc)
+    if (debrisGroupRef.current) {
+      debrisGroupRef.current.children.forEach((child, idx) => {
+        const d = debrisChunks[idx];
+        if (!d) return;
+        const dt = Math.min(t, 1.2);
+        child.position.set(
+          d.vx * dt,
+          Math.max(0, 0.15 + d.vy * dt - 4.8 * dt * dt),
+          d.vz * dt
+        );
+        child.rotation.x += delta * 8;
+        child.rotation.z += delta * 6;
+        const fade = Math.max(0, 1 - t / 1.0);
+        child.scale.setScalar(d.scale * fade);
+      });
+    }
+
+    // 5. VISIBLE 3D DEFENDER HERO:
+    //    - 0.00s..0.38s: Stands on square, gets hit-flashed, squashed & trembles in knockback!
+    //    - 0.38s..3.10s: Parachute deploys overhead and carries the actual 3D Defender Hero smoothly toward the spectator bench!
+    if (defenderGroupRef.current) {
+      if (t < 0.38) {
+        // Hit-stop knockback & squash/shake on the board!
+        const recoil = Math.sin((t / 0.38) * Math.PI) * 0.26;
+        const shake = Math.sin(state.clock.elapsedTime * 65) * 0.06;
+        defenderGroupRef.current.position.set(
+          knockDir[0] * recoil + shake,
+          0.12 + Math.sin((t / 0.38) * Math.PI) * 0.35,
+          knockDir[1] * recoil
+        );
+        defenderGroupRef.current.rotation.z =
+          Math.sin(state.clock.elapsedTime * 45) * 0.22;
+      } else {
+        // Smooth Parachute Ascent & Glide toward the Spectator Sideline!
+        const flightProgress = Math.min(1, (t - 0.38) / 2.6);
+        const easeOut = 1 - Math.pow(1 - flightProgress, 2.2);
+        const glideX = sidelineTargetX * easeOut * 0.72;
+        const glideY = 0.45 + flightProgress * 2.65;
+        const glideZ = knockDir[1] * 0.35 * (1 - flightProgress);
+        defenderGroupRef.current.position.set(glideX, glideY, glideZ);
+        // Gentle pendulum swing under the parachute
+        defenderGroupRef.current.rotation.z =
+          Math.sin(state.clock.elapsedTime * 5.5) * 0.16;
+      }
+    }
+
+    // 6. Parachute Canopy Pop-Open Elastic Animation at t=0.32s
+    if (parachuteCanopyRef.current) {
+      if (t < 0.28) {
+        parachuteCanopyRef.current.scale.setScalar(0.001);
+      } else {
+        const popT = Math.min(1, (t - 0.28) / 0.25);
+        // Overshoot elastic pop
+        const elastic =
+          popT < 0.7
+            ? (popT / 0.7) * 1.18
+            : 1.18 - ((popT - 0.7) / 0.3) * 0.18;
+        parachuteCanopyRef.current.scale.setScalar(elastic);
+      }
     }
   });
 
   return (
-    <group position={[pos[0], 0.15, pos[2]]}>
-      {/* Shockwave Ring */}
-      <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.25, 0.52, 32]} />
+    <group position={[pos[0], 0.12, pos[2]]}>
+      {/* Dynamic PointLight Flash on the Stone Tiles */}
+      <pointLight
+        ref={flashLightRef}
+        position={[0, 1.1, 0]}
+        color={classSignature.color}
+        intensity={6}
+        distance={6}
+      />
+
+      {/* Ground Shockwave Ring */}
+      <mesh ref={shockwaveRingRef} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.28, 0.46, 36]} />
         <meshBasicMaterial
-          color={effect.accentColor}
+          color={classSignature.color}
           transparent
           opacity={0.95}
           side={THREE.DoubleSide}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
         />
       </mesh>
 
-      {/* Vertical Arcane / Sword Slash Pillar */}
-      <mesh ref={beamRef} position={[0, 1.1, 0]}>
-        <cylinderGeometry
-          args={[isMagicAttacker ? 0.35 : 0.08, 0.45, 2.4, 12, 1, true]}
-        />
+      {/* Additive Ground Impact Glow Crater */}
+      <mesh
+        ref={innerBurstRef}
+        position={[0, 0.02, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <planeGeometry args={[1.1, 1.1]} />
         <meshBasicMaterial
-          color={effect.accentColor}
+          map={glowTex}
+          color={classSignature.secondary}
           transparent
-          opacity={0.75}
-          side={THREE.DoubleSide}
-          wireframe={!isMagicAttacker}
+          opacity={0.9}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
         />
       </mesh>
 
-      {/* 3D Spinning Sword / Magic Energy Slash Ring */}
-      <group ref={slashSwordRef} position={[0, 0.75, 0]}>
-        <mesh rotation={[Math.PI / 3, 0, 0]}>
-          <torusGeometry args={[0.62, 0.045, 12, 32, Math.PI * 1.3]} />
-          <meshBasicMaterial color="#fde047" />
-        </mesh>
-      </group>
-
-      {/* 3D Ascending Parachute Carrying the Captured Piece Gently Away */}
-      <group ref={parachuteGroupRef} position={[0, 0.55, 0]}>
-        {/* Golden/Purple Parachute Canopy Dome */}
-        <mesh position={[0, 0.65, 0]} castShadow>
-          <sphereGeometry
-            args={[0.42, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]}
-          />
-          <meshStandardMaterial
-            color="#f59e0b"
-            emissive="#d97706"
-            emissiveIntensity={0.35}
-            side={THREE.DoubleSide}
-            roughness={0.3}
-          />
-        </mesh>
-        {/* Parachute Suspension Lines */}
-        {[-0.25, 0.25].map((rx, i) => (
-          <mesh
-            key={i}
-            position={[rx * 0.6, 0.35, 0]}
-            rotation={[0, 0, rx * 0.5]}
-          >
-            <cylinderGeometry args={[0.008, 0.008, 0.55, 6]} />
-            <meshBasicMaterial color="#fef3c7" />
+      {/* Flying 3D Stone & Gem Debris Chunks on Impact */}
+      <group ref={debrisGroupRef}>
+        {debrisChunks.map((_, idx) => (
+          <mesh key={idx} castShadow>
+            <dodecahedronGeometry args={[1, 0]} />
+            <meshStandardMaterial
+              color={idx % 2 === 0 ? classSignature.color : '#78716c'}
+              emissive={idx % 2 === 0 ? classSignature.color : '#000000'}
+              emissiveIntensity={idx % 2 === 0 ? 0.8 : 0}
+              roughness={0.6}
+              flatShading
+            />
           </mesh>
         ))}
-        {/* Little Hero Basket / Pedestal under the Parachute */}
-        <mesh position={[0, 0.08, 0]}>
-          <cylinderGeometry args={[0.18, 0.22, 0.14, 10]} />
-          <meshStandardMaterial color="#78350f" metalness={0.4} roughness={0.5} />
-        </mesh>
+      </group>
+
+      {/* Class-Specific 3D Signature Weapon / Magic Impact Effect */}
+      <group ref={weaponGroupRef} position={[0, 0.68, 0]}>
+        {effect.attackerRole === 'k' && (
+          /* King Baba: Golden Excalibur Cross-Slash + Crown Shockwave */
+          <>
+            <mesh rotation={[Math.PI / 3, 0, 0]}>
+              <torusGeometry args={[0.72, 0.055, 12, 32, Math.PI * 1.4]} />
+              <meshBasicMaterial color="#fde047" />
+            </mesh>
+            <mesh rotation={[-Math.PI / 3, Math.PI / 2, 0]}>
+              <torusGeometry args={[0.68, 0.045, 12, 32, Math.PI * 1.4]} />
+              <meshBasicMaterial color="#f59e0b" />
+            </mesh>
+          </>
+        )}
+
+        {effect.attackerRole === 'q' && (
+          /* Queen Anne: Expanding Violet-Gold Arcane Supernova Sphere + Orbiting Rings */
+          <>
+            <mesh>
+              <icosahedronGeometry args={[0.55, 1]} />
+              <meshStandardMaterial
+                color="#e879f9"
+                emissive="#a855f7"
+                emissiveIntensity={1.4}
+                wireframe
+                transparent
+                opacity={0.85}
+              />
+            </mesh>
+            <mesh rotation={[Math.PI / 4, 0, 0]}>
+              <torusGeometry args={[0.75, 0.04, 10, 32]} />
+              <meshBasicMaterial color="#fde047" />
+            </mesh>
+          </>
+        )}
+
+        {effect.attackerRole === 'b' && (
+          /* Cool Aunt: Giant Sapphire Ice Crystal Burst */
+          <>
+            <mesh scale={[0.55, 1.25, 0.55]}>
+              <octahedronGeometry args={[0.7, 0]} />
+              <meshStandardMaterial
+                color="#38bdf8"
+                emissive="#0284c7"
+                emissiveIntensity={1.3}
+                transparent
+                opacity={0.8}
+              />
+            </mesh>
+            <mesh rotation={[0, Math.PI / 4, 0]} scale={[0.8, 0.8, 0.8]}>
+              <octahedronGeometry args={[0.65, 0]} />
+              <meshBasicMaterial color="#bae6fd" wireframe />
+            </mesh>
+          </>
+        )}
+
+        {effect.attackerRole === 'n' && (
+          /* Princess Mini: Twin-Ribbon Rose Whirlwind Vortex */
+          <>
+            <mesh rotation={[Math.PI / 2.2, 0, 0]}>
+              <torusGeometry args={[0.65, 0.05, 12, 32]} />
+              <meshBasicMaterial color="#fb7185" />
+            </mesh>
+            <mesh position={[0, 0.28, 0]} rotation={[-Math.PI / 2.2, 0, 0]}>
+              <torusGeometry args={[0.48, 0.045, 12, 32]} />
+              <meshBasicMaterial color="#fde047" />
+            </mesh>
+          </>
+        )}
+
+        {effect.attackerRole === 'r' && (
+          /* Uncle/Cousin Rook: Heavy Stone Battlement Seismic Slam */
+          <mesh>
+            <cylinderGeometry args={[0.68, 0.78, 0.45, 8, 1, true]} />
+            <meshStandardMaterial
+              color="#f97316"
+              emissive="#ea580c"
+              emissiveIntensity={1.2}
+              wireframe
+            />
+          </mesh>
+        )}
+
+        {effect.attackerRole === 'p' && (
+          /* Cousin Ranger: Twin Emerald/Silver Dagger X-Slash */
+          <>
+            <mesh rotation={[0, 0, Math.PI / 4]}>
+              <boxGeometry args={[1.35, 0.07, 0.07]} />
+              <meshBasicMaterial color="#6ee7b7" />
+            </mesh>
+            <mesh rotation={[0, 0, -Math.PI / 4]}>
+              <boxGeometry args={[1.35, 0.07, 0.07]} />
+              <meshBasicMaterial color="#ffffff" />
+            </mesh>
+          </>
+        )}
+      </group>
+
+      {/* THE ACTUAL 3D DEFENDER HERO BEING LAUNCHED & FLOATING AWAY UNDER THE ROYAL PARACHUTE! */}
+      <group ref={defenderGroupRef} position={[0, 0.15, 0]}>
+        {/* 1. The Defender Hero 3D Cutout Miniature visibly dangling & waving! */}
+        <Billboard position={[0, 0.42, 0]}>
+          <mesh>
+            <planeGeometry args={[0.92, 1.02]} />
+            <meshStandardMaterial
+              map={defenderTexture}
+              transparent
+              alphaTest={0.12}
+              roughness={0.35}
+              emissive={classSignature.color}
+              emissiveIntensity={0.22}
+            />
+          </mesh>
+        </Billboard>
+
+        {/* 2. Ornate Royal Silk Parachute Canopy directly above the Defender Hero */}
+        <group ref={parachuteCanopyRef} position={[0, 0.92, 0]}>
+          {/* Ribbed Golden-Royal Parachute Dome */}
+          <mesh position={[0, 0.38, 0]} castShadow>
+            <sphereGeometry
+              args={[0.52, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.56]}
+            />
+            <meshStandardMaterial
+              color={effect.attackerColor === 'w' ? '#f59e0b' : '#9333ea'}
+              emissive={effect.attackerColor === 'w' ? '#d97706' : '#7e22ce'}
+              emissiveIntensity={0.45}
+              side={THREE.DoubleSide}
+              roughness={0.3}
+              metalness={0.25}
+            />
+          </mesh>
+          {/* Golden Trim Ring around Parachute Rim */}
+          <mesh position={[0, 0.34, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.51, 0.022, 8, 24]} />
+            <meshBasicMaterial color="#fde047" />
+          </mesh>
+          {/* 4 Silk Suspension Cords connecting the Canopy to the Hero's Shoulders */}
+          {[
+            [-0.26, 0.16],
+            [0.26, 0.16],
+            [-0.26, -0.16],
+            [0.26, -0.16],
+          ].map(([rx, rz], i) => (
+            <mesh
+              key={i}
+              position={[rx * 0.65, 0.12, rz * 0.65]}
+              rotation={[rz * 0.55, 0, -rx * 0.55]}
+            >
+              <cylinderGeometry args={[0.009, 0.009, 0.52, 6]} />
+              <meshBasicMaterial color="#fef3c7" />
+            </mesh>
+          ))}
+        </group>
       </group>
 
       <Sparkles
-        count={60}
-        scale={2.8}
-        size={7}
-        speed={3.2}
-        color={effect.accentColor}
+        count={65}
+        scale={2.9}
+        size={7.5}
+        speed={3.4}
+        color={classSignature.color}
       />
 
-      {/* Battle-Chess Mini-Duel Card & Parachute Retreat Animation */}
-      <Html position={[0, 2.55, 0]} center zIndexRange={[40, 0]}>
-        <div className="pointer-events-none flex flex-col items-center gap-1.5 animate-bounce">
-          {/* VS Clash Banner */}
-          <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-amber-950/95 via-slate-900/95 to-purple-950/95 border-2 border-amber-400 shadow-[0_0_35px_rgba(251,191,36,0.75)]">
+      {/* Sleek Game-Designer Combat Callout Pill (Positioned high enough so the 3D duel below is 100% unobstructed!) */}
+      <Html position={[0, 2.85, 0]} center zIndexRange={[40, 0]}>
+        <div className="pointer-events-none flex flex-col items-center gap-1">
+          <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-slate-950/90 border-2 border-amber-400/90 backdrop-blur-md shadow-[0_0_30px_rgba(251,191,36,0.65)]">
             <img
               src={effect.attackerSprite}
               alt={effect.attackerName}
-              className="w-12 h-12 rounded-xl object-cover border-2 border-amber-400 shadow-md"
+              className="w-11 h-11 rounded-xl object-cover border-2 border-amber-400 shadow"
             />
             <div className="text-center px-1">
-              <div className="text-[10px] font-black uppercase tracking-widest text-amber-300">
-                ⚔️ BATTLE DUEL ⚔️
+              <div className="text-[9px] font-black uppercase tracking-widest text-amber-300">
+                {classSignature.badge}
               </div>
               <div className="text-xs sm:text-sm font-extrabold text-white whitespace-nowrap">
                 {effect.attackerName}{' '}
-                <span className="text-amber-400">⚡</span> {effect.defenderName}
+                <span className="text-amber-400">⚔️</span> {effect.defenderName}
               </div>
-              <div className="text-[11px] font-bold text-amber-200 mt-0.5 max-w-[220px] truncate">
+              <div className="text-[10px] font-bold text-amber-200/95 max-w-[230px] truncate italic">
                 „{effect.quote}“
               </div>
             </div>
@@ -662,14 +937,9 @@ const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
               <img
                 src={effect.defenderSprite}
                 alt={effect.defenderName}
-                className="w-10 h-10 rounded-xl object-cover border border-purple-400 opacity-75 -rotate-12"
+                className="w-9 h-9 rounded-xl object-cover border border-purple-400 opacity-80 -rotate-12"
               />
-              <span
-                className="absolute -top-3 -right-1 text-base"
-                title="Wird sanft per Fallschirm auf die Bank gebeamt!"
-              >
-                🪂
-              </span>
+              <span className="absolute -top-2.5 -right-1 text-sm">🪂</span>
             </div>
           </div>
         </div>
