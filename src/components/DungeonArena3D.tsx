@@ -1,6 +1,15 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Sparkles, Stars, Text, Html } from '@react-three/drei';
+import {
+  Billboard,
+  Html,
+  OrbitControls,
+  QuadraticBezierLine,
+  Sparkles,
+  Stars,
+  Text,
+  useTexture,
+} from '@react-three/drei';
 import * as THREE from 'three';
 import { Chess, Square } from 'chess.js';
 import {
@@ -48,6 +57,8 @@ interface DungeonArena3DProps {
   obstacleSquares?: string[];
   promotedSquare?: Square | null;
   winningTeamColor?: 'w' | 'b' | null;
+  capturedByGold?: PieceRole[];
+  capturedByPurple?: PieceRole[];
   kidMode: boolean;
   showAllNames: boolean;
   cameraPreset: CameraPreset;
@@ -573,21 +584,194 @@ const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
   );
 };
 
+// Spring-loaded Dungeon Stone Tile (depresses slightly when a piece lands or is selected)
+const DungeonStoneTile3D: React.FC<{
+  sq: Square;
+  tileX: number;
+  tileZ: number;
+  tileColor: string;
+  isLight: boolean;
+  isSelected: boolean;
+  isLastMoveTo: boolean;
+  isLegalTarget: boolean;
+  isCaptureTarget: boolean;
+  emissiveColor: string;
+  emissiveIntensity: number;
+  kidMode: boolean;
+  runeGlowColor: string;
+  onSquareClick: (sq: Square) => void;
+}> = ({
+  sq,
+  tileX,
+  tileZ,
+  tileColor,
+  isLight,
+  isSelected,
+  isLastMoveTo,
+  isLegalTarget,
+  isCaptureTarget,
+  emissiveColor,
+  emissiveIntensity,
+  kidMode,
+  runeGlowColor,
+  onSquareClick,
+}) => {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const pressDepth = useRef(0);
+
+  useEffect(() => {
+    if (isLastMoveTo || isSelected) {
+      pressDepth.current = 1;
+    }
+  }, [isLastMoveTo, isSelected]);
+
+  useFrame((_, delta) => {
+    if (!meshRef.current) return;
+    if (pressDepth.current > 0) {
+      pressDepth.current = Math.max(0, pressDepth.current - delta * 2.5);
+    }
+    const yOffset = -Math.sin(pressDepth.current * Math.PI) * 0.065;
+    meshRef.current.position.y = yOffset;
+  });
+
+  return (
+    <group position={[tileX, 0, tileZ]}>
+      <mesh
+        ref={meshRef}
+        receiveShadow
+        onClick={(e) => {
+          e.stopPropagation();
+          onSquareClick(sq);
+        }}
+      >
+        <boxGeometry args={[0.95, 0.14, 0.95]} />
+        <meshStandardMaterial
+          color={tileColor}
+          roughness={isLight ? 0.65 : 0.8}
+          metalness={0.14}
+          emissive={emissiveColor}
+          emissiveIntensity={emissiveIntensity}
+        />
+      </mesh>
+
+      {/* Glowing Dungeon Rune Indicator for Legal Moves */}
+      {isLegalTarget && (
+        <group
+          position={[0, 0.08, 0]}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSquareClick(sq);
+          }}
+        >
+          {isCaptureTarget ? (
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.33, 0.45, 24]} />
+              <meshBasicMaterial
+                color="#ef4444"
+                side={THREE.DoubleSide}
+                transparent
+                opacity={0.9}
+              />
+            </mesh>
+          ) : (
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <circleGeometry args={[kidMode ? 0.22 : 0.16, 20]} />
+              <meshBasicMaterial
+                color={kidMode ? '#34d399' : runeGlowColor}
+                transparent
+                opacity={0.88}
+              />
+            </mesh>
+          )}
+        </group>
+      )}
+    </group>
+  );
+};
+
+// 3D Spectator Bench Miniature along the Left & Right Stone Sidelines for Captured Pieces
+const SpectatorMiniHero3D: React.FC<{
+  role: PieceRole;
+  color: 'w' | 'b';
+  position: [number, number, number];
+  heroConfig: FamilyHeroConfig;
+}> = ({ color, position, heroConfig }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const pngPath = useMemo(
+    () => heroConfig.spritePath.replace('.jpg', '.png'),
+    [heroConfig.spritePath]
+  );
+  const texture = useTexture(pngPath);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const isGold = color === 'w';
+
+  useFrame((state) => {
+    if (groupRef.current) {
+      groupRef.current.position.y =
+        position[1] +
+        Math.abs(
+          Math.sin(state.clock.elapsedTime * 3.5 + position[2] * 1.7)
+        ) *
+          0.08;
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={position}>
+      {/* Small Stone Seat Block */}
+      <mesh position={[0, 0.06, 0]} castShadow>
+        <dodecahedronGeometry args={[0.2, 0]} />
+        <meshStandardMaterial
+          color={isGold ? '#786b5d' : '#4a3e5e'}
+          roughness={0.9}
+          flatShading
+        />
+      </mesh>
+      <Billboard position={[0, 0.42, 0]}>
+        <mesh>
+          <planeGeometry args={[0.62, 0.68]} />
+          <meshStandardMaterial
+            map={texture}
+            transparent
+            alphaTest={0.1}
+            roughness={0.4}
+          />
+        </mesh>
+      </Billboard>
+    </group>
+  );
+};
+
 const CameraDirector: React.FC<{
   preset: CameraPreset;
   captureEffect: ActiveCaptureEffect | null;
 }> = ({ preset, captureEffect }) => {
   const { camera } = useThree();
   const controlsRef = useRef<any>(null);
+  const shakeTimer = useRef(0);
 
-  useFrame((_, delta) => {
+  useEffect(() => {
+    if (captureEffect) {
+      shakeTimer.current = 0.55;
+    }
+  }, [captureEffect]);
+
+  useFrame((state, delta) => {
     if (!controlsRef.current) return;
 
-    // Dramatic Battle-Chess Close-up Zoom during a Capture!
+    // Dramatic Battle-Chess Close-up Zoom + Impact Screen-Shake during a Capture!
     if (captureEffect) {
       const [tx, , tz] = squareToWorld(captureEffect.square);
+      let shakeX = 0;
+      let shakeY = 0;
+      if (shakeTimer.current > 0) {
+        shakeTimer.current = Math.max(0, shakeTimer.current - delta);
+        const power = shakeTimer.current * 0.32;
+        shakeX = Math.sin(state.clock.elapsedTime * 55) * power;
+        shakeY = Math.cos(state.clock.elapsedTime * 48) * power;
+      }
       controlsRef.current.target.lerp(
-        new THREE.Vector3(tx * 0.65, 0.45, tz * 0.65),
+        new THREE.Vector3(tx * 0.65 + shakeX, 0.45 + shakeY, tz * 0.65),
         delta * 4.5
       );
       controlsRef.current.update();
@@ -640,6 +824,8 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
   obstacleSquares = [],
   promotedSquare = null,
   winningTeamColor = null,
+  capturedByGold = [],
+  capturedByPurple = [],
   kidMode,
   showAllNames,
   cameraPreset,
@@ -847,61 +1033,101 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
             }
 
             return (
-              <group key={sq} position={[tileX, 0, tileZ]}>
-                <mesh
-                  receiveShadow
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSquareClick(sq);
-                  }}
-                >
-                  <boxGeometry args={[0.96, 0.12, 0.96]} />
-                  <meshStandardMaterial
-                    color={tileColor}
-                    roughness={isLight ? 0.55 : 0.7}
-                    metalness={0.18}
-                    emissive={emissiveColor}
-                    emissiveIntensity={emissiveIntensity}
-                  />
-                </mesh>
-
-                {/* Glowing Dungeon Rune Indicator for Legal Moves */}
-                {isLegalTarget && (
-                  <group
-                    position={[0, 0.075, 0]}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSquareClick(sq);
-                    }}
-                  >
-                    {isCaptureTarget ? (
-                      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                        <ringGeometry args={[0.33, 0.45, 24]} />
-                        <meshBasicMaterial
-                          color="#ef4444"
-                          side={THREE.DoubleSide}
-                          transparent
-                          opacity={0.9}
-                        />
-                      </mesh>
-                    ) : (
-                      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                        <circleGeometry args={[kidMode ? 0.22 : 0.16, 20]} />
-                        <meshBasicMaterial
-                          color={
-                            kidMode ? '#34d399' : level.theme.runeGlowColor
-                          }
-                          transparent
-                          opacity={0.88}
-                        />
-                      </mesh>
-                    )}
-                  </group>
-                )}
-              </group>
+              <DungeonStoneTile3D
+                key={sq}
+                sq={sq}
+                tileX={tileX}
+                tileZ={tileZ}
+                tileColor={tileColor}
+                isLight={isLight}
+                isSelected={isSelected}
+                isLastMoveTo={lastMove?.to === sq}
+                isLegalTarget={isLegalTarget}
+                isCaptureTarget={isCaptureTarget}
+                emissiveColor={emissiveColor}
+                emissiveIntensity={emissiveIntensity}
+                kidMode={kidMode}
+                runeGlowColor={level.theme.runeGlowColor}
+                onSquareClick={onSquareClick}
+              />
             );
           })
         )}
+      </group>
+
+      {/* Glowing 3D Parabolic Trajectory Arc for Last Move & Hint Move */}
+      {lastMove && (
+        <QuadraticBezierLine
+          start={(() => {
+            const [x, , z] = squareToWorld(lastMove.from);
+            return [x, 0.16, z] as [number, number, number];
+          })()}
+          end={(() => {
+            const [x, , z] = squareToWorld(lastMove.to);
+            return [x, 0.16, z] as [number, number, number];
+          })()}
+          mid={(() => {
+            const [x1, , z1] = squareToWorld(lastMove.from);
+            const [x2, , z2] = squareToWorld(lastMove.to);
+            return [(x1 + x2) / 2, 1.15, (z1 + z2) / 2] as [
+              number,
+              number,
+              number,
+            ];
+          })()}
+          color={level.theme.runeGlowColor}
+          lineWidth={2.5}
+          dashed
+          dashScale={6}
+          dashSize={0.4}
+          dashOffset={0}
+        />
+      )}
+
+      {hintMove && (
+        <QuadraticBezierLine
+          start={(() => {
+            const [x, , z] = squareToWorld(hintMove.from);
+            return [x, 0.2, z] as [number, number, number];
+          })()}
+          end={(() => {
+            const [x, , z] = squareToWorld(hintMove.to);
+            return [x, 0.2, z] as [number, number, number];
+          })()}
+          mid={(() => {
+            const [x1, , z1] = squareToWorld(hintMove.from);
+            const [x2, , z2] = squareToWorld(hintMove.to);
+            return [(x1 + x2) / 2, 1.55, (z1 + z2) / 2] as [
+              number,
+              number,
+              number,
+            ];
+          })()}
+          color="#38bdf8"
+          lineWidth={3.5}
+        />
+      )}
+
+      {/* 3D Spectator Tribune along the Left & Right Stone Sidelines for Captured Pieces */}
+      <group>
+        {capturedByGold.slice(0, 12).map((role, idx) => (
+          <SpectatorMiniHero3D
+            key={`spec-gold-${idx}-${role}`}
+            role={role}
+            color="b"
+            position={[-4.75, 0.05, -3.2 + idx * 0.58]}
+            heroConfig={heroes[role]}
+          />
+        ))}
+        {capturedByPurple.slice(0, 12).map((role, idx) => (
+          <SpectatorMiniHero3D
+            key={`spec-purple-${idx}-${role}`}
+            role={role}
+            color="w"
+            position={[4.75, 0.05, -3.2 + idx * 0.58]}
+            heroConfig={heroes[role]}
+          />
+        ))}
       </group>
 
       {/* Treasure Hunt Chests & Obstacles */}

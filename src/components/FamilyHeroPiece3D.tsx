@@ -1,6 +1,6 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Billboard, Html, useTexture } from '@react-three/drei';
+import { Billboard, Html, Sparkles, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { FamilyHeroConfig, PieceRole } from '../data/familyConfig';
 
@@ -56,6 +56,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   const shieldDomeRef = useRef<THREE.Mesh>(null);
   const landingRingRef = useRef<THREE.Mesh>(null);
   const checkAlarmRingRef = useRef<THREE.Mesh>(null);
+  const floatingEmblemRef = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
 
   const currentPos = useRef(
@@ -65,6 +66,13 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   const jumpProgress = useRef(fromPosition && isLastMoved ? 0 : 1);
   const landingDustAlpha = useRef(fromPosition && isLastMoved ? 1 : 0);
   const promotionSpin = useRef(isPromoted ? Math.PI * 4 : 0);
+  const selectBounce = useRef(0);
+
+  useEffect(() => {
+    if (isSelected) {
+      selectBounce.current = 1;
+    }
+  }, [isSelected]);
 
   // Pick primary or secondary cousin sprite path
   const activeSpriteJpg = useMemo(() => {
@@ -90,8 +98,43 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   const isGoldTeam = color === 'w';
   const primaryTeamColor = isGoldTeam ? '#fbbf24' : '#a855f7';
   const secondaryTeamColor = isGoldTeam ? '#fef3c7' : '#e9d5ff';
-  const pedestalStoneColor = isGoldTeam ? '#443527' : '#251c38';
-  const baseScale = ROLE_HEIGHT_SCALE[role] || 1.2;
+  const stoneSlabDark = isGoldTeam ? '#574c41' : '#332b42';
+  const stoneSlabMid = isGoldTeam ? '#786b5d' : '#4a3e5e';
+  const stoneSlabLight = isGoldTeam ? '#9c8d7c' : '#65567d';
+  const baseScale = ROLE_HEIGHT_SCALE[role] || 1.7;
+
+  // Deterministic rugged rock chunks around the hero's feet
+  const rockChunks = useMemo(() => {
+    const count = 8;
+    const chunks: {
+      angle: number;
+      dist: number;
+      sx: number;
+      sy: number;
+      sz: number;
+      rotY: number;
+      rotZ: number;
+      shade: string;
+    }[] = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (i * Math.PI * 2) / count + (i % 2 === 0 ? 0.12 : -0.08);
+      const dist = 0.27 + (i % 3) * 0.035;
+      const sx = 0.13 + (i % 2) * 0.04;
+      const sy = 0.09 + ((i + 1) % 3) * 0.035;
+      const sz = 0.12 + (i % 3) * 0.03;
+      chunks.push({
+        angle,
+        dist,
+        sx,
+        sy,
+        sz,
+        rotY: angle + 0.4,
+        rotZ: (i % 2 === 0 ? 1 : -1) * 0.18,
+        shade: i % 2 === 0 ? stoneSlabMid : stoneSlabLight,
+      });
+    }
+    return chunks;
+  }, [stoneSlabMid, stoneSlabLight]);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
@@ -186,7 +229,39 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         : isCelebrating
         ? 1 + Math.sin(t * 8) * 0.08
         : 1 + Math.sin(t * 2.6) * 0.026;
-      spriteRef.current.scale.set(baseScale, baseScale * breath, baseScale);
+
+      // Pixar-style Squash & Stretch during hop, landing, and selection pop!
+      if (selectBounce.current > 0) {
+        selectBounce.current = Math.max(0, selectBounce.current - delta * 3.5);
+      }
+      const hopStretch =
+        jumpProgress.current < 1
+          ? Math.sin(jumpProgress.current * Math.PI) * 0.16
+          : 0;
+      const landingSquash =
+        landingDustAlpha.current > 0.65
+          ? -Math.sin(((landingDustAlpha.current - 0.65) / 0.35) * Math.PI) *
+            0.14
+          : 0;
+      const selectPop =
+        selectBounce.current > 0
+          ? Math.sin(selectBounce.current * Math.PI * 2) * 0.12
+          : 0;
+
+      const stretchFactor = 1 + hopStretch + landingSquash + selectPop;
+      const squashFactor = 1 - (hopStretch + landingSquash + selectPop) * 0.55;
+
+      spriteRef.current.scale.set(
+        baseScale * squashFactor,
+        baseScale * breath * stretchFactor,
+        baseScale
+      );
+    }
+
+    if (floatingEmblemRef.current) {
+      floatingEmblemRef.current.rotation.y += delta * 1.8;
+      floatingEmblemRef.current.position.y =
+        baseScale * 0.56 + Math.sin(state.clock.elapsedTime * 3.2) * 0.05;
     }
 
     if (auraRingRef.current) {
@@ -215,44 +290,95 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         document.body.style.cursor = 'auto';
       }}
     >
-      {/* 1. 3D Sculpted Dungeon Pedestal Base */}
-      <mesh castShadow receiveShadow position={[0, 0.09, 0]}>
-        <cylinderGeometry args={[0.37, 0.43, 0.18, 8]} />
+      {/* 1. 3D Sculpted Multi-Tiered Carved Dungeon Rock / Stone Pedestal under the Hero's Feet */}
+      {/* Bottom Rough Hewn Flagstone Foundation */}
+      <mesh castShadow receiveShadow position={[0, 0.055, 0]} rotation={[0, 0.35, 0]}>
+        <cylinderGeometry args={[0.42, 0.47, 0.11, 7]} />
         <meshStandardMaterial
-          color={pedestalStoneColor}
-          roughness={0.5}
-          metalness={0.35}
+          color={stoneSlabDark}
+          roughness={0.92}
+          metalness={0.08}
+          flatShading
         />
       </mesh>
 
-      {/* Ornate Metallic Team Rim */}
-      <mesh castShadow position={[0, 0.19, 0]}>
-        <cylinderGeometry args={[0.34, 0.38, 0.06, 16]} />
+      {/* Glowing Runic Magma/Crystal Seam Carved into the Stone */}
+      <mesh castShadow position={[0, 0.125, 0]}>
+        <cylinderGeometry args={[0.38, 0.4, 0.04, 12]} />
         <meshStandardMaterial
           color={primaryTeamColor}
           roughness={0.25}
           metalness={0.85}
-          emissive={isSelected || hovered ? primaryTeamColor : '#000000'}
-          emissiveIntensity={isSelected ? 0.65 : hovered ? 0.35 : 0.1}
+          emissive={primaryTeamColor}
+          emissiveIntensity={isSelected ? 0.95 : hovered ? 0.6 : 0.32}
         />
       </mesh>
 
-      {/* Castle Battlements around Rook base */}
+      {/* Upper Chiseled Stone Slab Platform */}
+      <mesh castShadow receiveShadow position={[0, 0.185, 0]} rotation={[0, 0.78, 0]}>
+        <cylinderGeometry args={[0.34, 0.39, 0.1, 6]} />
+        <meshStandardMaterial
+          color={stoneSlabMid}
+          roughness={0.88}
+          metalness={0.12}
+          flatShading
+        />
+      </mesh>
+
+      {/* Rugged 3D Boulders & Cobblestone Rocks Clustered Directly Around the Hero's Feet */}
+      <group position={[0, 0.23, 0]}>
+        {rockChunks.map((rc, idx) => (
+          <mesh
+            key={idx}
+            position={[
+              Math.cos(rc.angle) * rc.dist,
+              0.01,
+              Math.sin(rc.angle) * rc.dist,
+            ]}
+            rotation={[0.1, rc.rotY, rc.rotZ]}
+            scale={[rc.sx, rc.sy, rc.sz]}
+            castShadow
+            receiveShadow
+          >
+            <dodecahedronGeometry args={[1, 0]} />
+            <meshStandardMaterial
+              color={rc.shade}
+              roughness={0.94}
+              metalness={0.06}
+              flatShading
+            />
+          </mesh>
+        ))}
+
+        {/* Central Flat Stepping Stone Directly Under the Boots/Feet */}
+        <mesh position={[0, 0.015, 0]} scale={[1, 0.32, 1]} receiveShadow>
+          <dodecahedronGeometry args={[0.28, 1]} />
+          <meshStandardMaterial
+            color={stoneSlabLight}
+            roughness={0.9}
+            metalness={0.08}
+            flatShading
+          />
+        </mesh>
+      </group>
+
+      {/* Castle Stone Battlements around Rook base */}
       {role === 'r' && (
-        <group position={[0, 0.24, 0]}>
+        <group position={[0, 0.27, 0]}>
           {[0, 1, 2, 3, 4, 5].map((i) => {
             const angle = (i * Math.PI) / 3;
             return (
               <mesh
                 key={i}
-                position={[Math.cos(angle) * 0.31, 0, Math.sin(angle) * 0.31]}
+                position={[Math.cos(angle) * 0.33, 0, Math.sin(angle) * 0.33]}
                 castShadow
               >
-                <boxGeometry args={[0.09, 0.1, 0.09]} />
+                <boxGeometry args={[0.1, 0.12, 0.1]} />
                 <meshStandardMaterial
-                  color={primaryTeamColor}
-                  metalness={0.8}
-                  roughness={0.2}
+                  color={stoneSlabLight}
+                  metalness={0.25}
+                  roughness={0.85}
+                  flatShading
                 />
               </mesh>
             );
@@ -347,14 +473,74 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         </mesh>
       )}
 
+      {/* Comet Sparkle Trail while Jumping/Moving */}
+      {jumpProgress.current < 1 && (
+        <Sparkles
+          count={26}
+          scale={[0.9, 1.2, 0.9]}
+          position={[0, 0.6, 0]}
+          size={5}
+          speed={2.8}
+          color={primaryTeamColor}
+        />
+      )}
+
       {/* 2. 3D Family Hero Miniature Standee */}
       <Billboard
-        position={[0, 0.22 + baseScale * 0.46, 0]}
+        position={[0, 0.25 + baseScale * 0.45, 0]}
         follow={true}
         lockX={false}
         lockY={false}
         lockZ={false}
       >
+        {/* Floating 3D Role Emblem above the Hero (Crown for King, Star Orb for Queen, Diamond for Aunt, etc.) */}
+        <group ref={floatingEmblemRef} position={[0, baseScale * 0.56, 0]}>
+          {role === 'k' && (
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <torusGeometry args={[0.13, 0.035, 8, 6]} />
+              <meshStandardMaterial
+                color="#fbbf24"
+                emissive="#f59e0b"
+                emissiveIntensity={0.7}
+                metalness={0.9}
+                roughness={0.15}
+              />
+            </mesh>
+          )}
+          {role === 'q' && (
+            <mesh>
+              <octahedronGeometry args={[0.13, 0]} />
+              <meshStandardMaterial
+                color="#e879f9"
+                emissive="#c084fc"
+                emissiveIntensity={0.85}
+                metalness={0.8}
+                roughness={0.1}
+              />
+            </mesh>
+          )}
+          {role === 'b' && (
+            <mesh scale={[0.8, 1.35, 0.8]}>
+              <octahedronGeometry args={[0.11, 0]} />
+              <meshStandardMaterial
+                color="#38bdf8"
+                emissive="#0284c7"
+                emissiveIntensity={0.8}
+              />
+            </mesh>
+          )}
+          {role === 'n' && (
+            <mesh>
+              <dodecahedronGeometry args={[0.1, 0]} />
+              <meshStandardMaterial
+                color="#fb7185"
+                emissive="#f43f5e"
+                emissiveIntensity={0.75}
+              />
+            </mesh>
+          )}
+        </group>
+
         <group ref={spriteRef} scale={[baseScale, baseScale, baseScale]}>
           <mesh position={[0, 0.02, -0.04]}>
             <circleGeometry args={[0.42, 24]} />

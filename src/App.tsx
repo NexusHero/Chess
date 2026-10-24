@@ -895,6 +895,8 @@ export const App: React.FC = () => {
                     : 'b'
                   : null
               }
+              capturedByGold={capturedByGold}
+              capturedByPurple={capturedByPurple}
               kidMode={kidMode}
               showAllNames={showAllNames}
               cameraPreset={cameraPreset}
@@ -1086,10 +1088,23 @@ export const App: React.FC = () => {
       {/* MIDDLE FLOATING BANNERS */}
       <div className="relative z-10 pointer-events-none flex-1 flex flex-col justify-between p-3 sm:p-5">
         <div className="flex flex-col items-center gap-2">
-          {/* Status Pill */}
-          <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-3 px-4 py-1.5 rounded-full bg-black/75 border border-amber-500/40 backdrop-blur-md shadow-xl">
+          {/* Status Pill with Animated Hero Portraits */}
+          <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-3 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-950/85 via-black/85 to-purple-950/85 border-2 border-amber-400/50 backdrop-blur-md shadow-[0_0_25px_rgba(251,191,36,0.25)]">
+            <img
+              src={
+                gameMode === 'treasure'
+                  ? heroes[currentQuest.heroRole].spritePath
+                  : turnColor === 'w'
+                  ? heroes.k.spritePath
+                  : heroes.q.spritePath
+              }
+              alt="Aktiver Held"
+              className={`w-7 h-7 rounded-full object-cover border-2 ${
+                turnColor === 'w' ? 'border-amber-400' : 'border-purple-400'
+              } shadow`}
+            />
             <div
-              className={`w-3 h-3 rounded-full animate-pulse ${
+              className={`w-2.5 h-2.5 rounded-full animate-pulse ${
                 gameMode === 'treasure'
                   ? 'bg-pink-400 shadow-[0_0_10px_#f472b6]'
                   : turnColor === 'w'
