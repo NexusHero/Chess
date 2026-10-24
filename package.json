@@ -6,13 +6,13 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap:sync": "vite build && npx cap sync android",
+    "apk:debug": "vite build && npx cap sync android && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
-    "@esbuild/darwin-arm64": "^0.28.2",
     "@react-three/drei": "^9.121.4",
     "@react-three/fiber": "^8.17.12",
-    "@rollup/rollup-darwin-arm64": "^4.65.0",
     "canvas-confetti": "^1.9.3",
     "chess.js": "^1.0.0-beta.8",
     "lucide-react": "^0.468.0",
@@ -22,6 +22,9 @@
     "three": "^0.171.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
     "@types/canvas-confetti": "^1.9.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",

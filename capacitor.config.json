@@ -1,0 +1,9 @@
+{
+  "appId": "com.familydungeon.chess",
+  "appName": "Family Dungeon Chess",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}

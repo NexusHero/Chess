@@ -1,0 +1,64 @@
+name: Build Android APK & Deploy Web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build-android-apk:
+    name: 📱 Build Family Dungeon Chess APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Java 21 (for Capacitor Android Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install dependencies & Build Web Bundle
+        run: |
+          npm install
+          npm run build
+          npx cap sync android
+
+      - name: Build Android APK via Gradle
+        working-directory: ./android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Rename APK to Family-Dungeon-Chess.apk
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk Family-Dungeon-Chess.apk
+
+      - name: Upload Family-Dungeon-Chess.apk as Action Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Family-Dungeon-Chess-APK
+          path: Family-Dungeon-Chess.apk
+          retention-days: 90
+
+      - name: Publish APK to Latest GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          name: "📱 Family Dungeon Chess 3D — Android APK (Latest)"
+          body: "Direkt installierbare Android-APK für Handys & Tablets (inklusive 3D-Runenbrett, Familien-Figuren, Ramadan/Halloween-Welten & Offline-KI)."
+          files: Family-Dungeon-Chess.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
