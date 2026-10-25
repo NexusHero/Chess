@@ -29,6 +29,8 @@ import {
   Wifi,
   Compass,
   Zap,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import {
   DEFAULT_FAMILY_HEROES,
@@ -157,6 +159,9 @@ export const App: React.FC = () => {
     colorClass: string;
   } | null>(null);
   const [isChronicleOpen, setIsChronicleOpen] = useState<boolean>(false);
+  const [isCleanHudMode, setIsCleanHudMode] = useState<boolean>(false);
+  const [pillSpinning, setPillSpinning] = useState<boolean>(false);
+  const [showPillHeroTooltip, setShowPillHeroTooltip] = useState<boolean>(false);
 
   // Treasure Hunt Mode State (Princess Mini's Schatzjagd)
   const [questIndex, setQuestIndex] = useState<number>(0);
@@ -1077,7 +1082,11 @@ export const App: React.FC = () => {
       </div>
 
       {/* TOP HUD: Title, Level Switcher (1-3) & Mode Controls */}
-      <header className="relative z-10 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-2.5 bg-gradient-to-b from-black/85 via-black/55 to-transparent pointer-events-auto">
+      <header
+        className={`relative z-10 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-2.5 bg-gradient-to-b from-black/85 via-black/55 to-transparent pointer-events-auto transition-all duration-300 ${
+          isCleanHudMode ? 'hidden' : ''
+        }`}
+      >
         {/* Brand Title */}
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30 border border-amber-200">
@@ -1236,6 +1245,17 @@ export const App: React.FC = () => {
               <VolumeX className="w-4 h-4 opacity-50" />
             )}
           </button>
+
+          <button
+            onClick={() => {
+              setIsCleanHudMode((v) => !v);
+              soundFX.playSelect();
+            }}
+            className="p-2 rounded-xl bg-black/60 hover:bg-amber-500/25 text-amber-200 border border-amber-400/30 transition"
+            title="Kino-Fokus (Menüs ausblenden für 95% 3D-Spielfeld)"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
@@ -1243,7 +1263,7 @@ export const App: React.FC = () => {
       <div className="relative z-10 pointer-events-none flex-1 flex flex-col justify-between p-3 sm:p-5">
         <div className="flex flex-col items-center gap-2">
           {/* Heartfelt Ramadan Mubarak Trilingual Greeting Banner when Ramadan Theme is active */}
-          {currentLevel.specialTheme === 'ramadan' && (
+          {currentLevel.specialTheme === 'ramadan' && !isCleanHudMode && (
             <div className="pointer-events-auto flex items-center gap-2.5 px-4 py-1 rounded-full bg-gradient-to-r from-emerald-950/90 via-teal-900/90 to-emerald-950/90 border border-amber-400/80 shadow-[0_0_25px_rgba(251,191,36,0.35)] backdrop-blur-md">
               <span className="text-sm">🌙</span>
               <span className="text-[11px] sm:text-xs font-extrabold tracking-wide text-amber-300">
@@ -1255,80 +1275,167 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* Status Pill with Animated Hero Portraits */}
-          <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-3 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-950/85 via-black/85 to-purple-950/85 border-2 border-amber-400/50 backdrop-blur-md shadow-[0_0_25px_rgba(251,191,36,0.25)]">
-            <img
-              src={
-                gameMode === 'treasure'
-                  ? heroes[currentQuest.heroRole].spritePath
-                  : turnColor === 'w'
-                  ? heroes.k.spritePath
-                  : heroes.q.spritePath
-              }
-              alt="Aktiver Held"
-              className={`w-7 h-7 rounded-full object-cover border-2 ${
-                turnColor === 'w' ? 'border-amber-400' : 'border-purple-400'
-              } shadow`}
-            />
+          {/* Interactive Animated Hero Status Pill (Tap for Haptics, Voice & Hero Info) */}
+          <div className="flex items-center gap-2">
             <div
-              className={`w-2.5 h-2.5 rounded-full animate-pulse ${
+              onClick={() => {
+                soundFX.playSelect();
+                const activeHero =
+                  gameMode === 'treasure'
+                    ? heroes[currentQuest.heroRole]
+                    : turnColor === 'w'
+                    ? heroes.k
+                    : heroes.q;
+                if (activeHero.customAudioDataUrl) {
+                  soundFX.playCustomVoice(activeHero.customAudioDataUrl);
+                }
+                setPillSpinning(true);
+                setShowPillHeroTooltip((prev) => !prev);
+                setTimeout(() => setPillSpinning(false), 600);
+              }}
+              title="Tippe auf die Helden-Pille für Stimme, Haptik & Spezialkraft-Info!"
+              className={`pointer-events-auto cursor-pointer select-none flex flex-wrap items-center justify-center gap-3 px-4 py-1.5 rounded-full border-2 backdrop-blur-md transition-all duration-300 hover:scale-[1.03] active:scale-95 ${
                 gameMode === 'treasure'
-                  ? 'bg-pink-400 shadow-[0_0_10px_#f472b6]'
+                  ? 'bg-gradient-to-r from-pink-950/90 via-black/85 to-amber-950/90 border-pink-400/70 shadow-[0_0_28px_rgba(244,114,182,0.35)]'
                   : turnColor === 'w'
-                  ? 'bg-amber-400 shadow-[0_0_10px_#fbbf24]'
-                  : 'bg-purple-400 shadow-[0_0_10px_#c084fc]'
+                  ? 'bg-gradient-to-r from-amber-950/90 via-black/85 to-amber-900/85 border-amber-400/70 shadow-[0_0_28px_rgba(251,191,36,0.35)]'
+                  : 'bg-gradient-to-r from-purple-950/90 via-black/85 to-indigo-950/90 border-purple-400/70 shadow-[0_0_28px_rgba(192,132,252,0.35)]'
               }`}
-            />
-            <span className="text-xs sm:text-sm font-bold text-amber-100">
-              {gameMode === 'treasure' ? (
-                <span>
-                  🎁 <strong>{currentQuest.title}</strong> — Noch{' '}
-                  <strong className="text-amber-300">
-                    {remainingTreasures.length}
-                  </strong>{' '}
-                  Schatztruhen! (Züge: {questMovesCount})
+            >
+              <div className="relative">
+                <img
+                  src={
+                    gameMode === 'treasure'
+                      ? heroes[currentQuest.heroRole].spritePath
+                      : turnColor === 'w'
+                      ? heroes.k.spritePath
+                      : heroes.q.spritePath
+                  }
+                  alt="Aktiver Held"
+                  className={`w-8 h-8 rounded-full object-cover border-2 transition-transform duration-500 ${
+                    pillSpinning ? 'rotate-[360deg] scale-110' : ''
+                  } ${
+                    gameMode === 'treasure'
+                      ? 'border-pink-400'
+                      : turnColor === 'w'
+                      ? 'border-amber-400'
+                      : 'border-purple-400'
+                  } shadow-md`}
+                />
+                {currentLevel.specialTheme && (
+                  <span className="absolute -bottom-1 -right-1 text-[10px] leading-none drop-shadow">
+                    {currentLevel.specialTheme === 'ramadan' ? '🌙' : '🎃'}
+                  </span>
+                )}
+              </div>
+              <div
+                className={`w-2.5 h-2.5 rounded-full animate-pulse ${
+                  gameMode === 'treasure'
+                    ? 'bg-pink-400 shadow-[0_0_10px_#f472b6]'
+                    : turnColor === 'w'
+                    ? 'bg-amber-400 shadow-[0_0_10px_#fbbf24]'
+                    : 'bg-purple-400 shadow-[0_0_10px_#c084fc]'
+                }`}
+              />
+              <span className="text-xs sm:text-sm font-bold text-amber-100">
+                {gameMode === 'treasure' ? (
+                  <span>
+                    🎁 <strong>{currentQuest.title}</strong> — Noch{' '}
+                    <strong className="text-amber-300">
+                      {remainingTreasures.length}
+                    </strong>{' '}
+                    Schatztruhen! (Züge: {questMovesCount})
+                  </span>
+                ) : isCheckmate ? (
+                  <span className="text-amber-300 font-extrabold">
+                    🏆 SCHACHMATT!{' '}
+                    {turnColor === 'w'
+                      ? 'Team Kristall-Violett'
+                      : 'Team Gold-Licht'}{' '}
+                    gewinnt!
+                  </span>
+                ) : isDraw ? (
+                  <span>🤝 Unentschieden im Dungeon!</span>
+                ) : isAIThinking ? (
+                  <span className="text-purple-300">
+                    🔮 {currentLevel.bossName} überlegt seinen Zug...
+                  </span>
+                ) : turnColor === 'w' ? (
+                  <span>
+                    ☀️ Team Gold ({heroes.k.customName} & {heroes.q.customName})
+                    ist am Zug
+                  </span>
+                ) : gameMode === 'local2p' || gameMode === 'online' ? (
+                  <span>🌙 Team Kristall-Violett ist am Zug</span>
+                ) : (
+                  <span>🌙 {currentLevel.bossName} ist am Zug</span>
+                )}
+              </span>
+
+              {isCheck && !isCheckmate && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[11px] font-extrabold animate-bounce">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  SCHACH!
                 </span>
-              ) : isCheckmate ? (
-                <span className="text-amber-300 font-extrabold">
-                  🏆 SCHACHMATT!{' '}
-                  {turnColor === 'w'
-                    ? 'Team Kristall-Violett'
-                    : 'Team Gold-Licht'}{' '}
-                  gewinnt!
-                </span>
-              ) : isDraw ? (
-                <span>🤝 Unentschieden im Dungeon!</span>
-              ) : isAIThinking ? (
-                <span className="text-purple-300">
-                  🔮 {currentLevel.bossName} überlegt seinen Zug...
-                </span>
-              ) : turnColor === 'w' ? (
-                <span>
-                  ☀️ Team Gold ({heroes.k.customName} & {heroes.q.customName})
-                  ist am Zug
-                </span>
-              ) : gameMode === 'local2p' || gameMode === 'online' ? (
-                <span>🌙 Team Kristall-Violett ist am Zug</span>
-              ) : (
-                <span>🌙 {currentLevel.bossName} ist am Zug</span>
               )}
-            </span>
 
-            {isCheck && !isCheckmate && gameMode !== 'treasure' && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[11px] font-extrabold animate-bounce">
-                <ShieldAlert className="w-3.5 h-3.5" />
-                SCHACH!
-              </span>
-            )}
+              {moveQualityBadge && gameMode !== 'treasure' && (
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border shadow-md animate-pulse ${moveQualityBadge.colorClass}`}
+                >
+                  {moveQualityBadge.label}
+                </span>
+              )}
+            </div>
 
-            {moveQualityBadge && gameMode !== 'treasure' && (
-              <span
-                className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border shadow-md animate-pulse ${moveQualityBadge.colorClass}`}
+            {isCleanHudMode && (
+              <button
+                onClick={() => {
+                  setIsCleanHudMode(false);
+                  soundFX.playSelect();
+                }}
+                className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/80 hover:bg-amber-500/30 text-amber-200 border border-amber-400/50 text-xs font-bold shadow-lg backdrop-blur-md transition"
+                title="Menüleisten wieder einblenden"
               >
-                {moveQualityBadge.label}
-              </span>
+                <Minimize2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">HUD zeigen</span>
+              </button>
             )}
           </div>
+
+          {/* Interactive Hero Pill Quick-Tooltip (toggled on tap) */}
+          {showPillHeroTooltip && (
+            <div
+              onClick={() => setShowPillHeroTooltip(false)}
+              className="pointer-events-auto cursor-pointer flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-black/90 border border-amber-400/60 backdrop-blur-md text-xs text-amber-100 shadow-xl"
+            >
+              <span className="text-amber-300 font-extrabold">
+                {(gameMode === 'treasure'
+                  ? heroes[currentQuest.heroRole]
+                  : turnColor === 'w'
+                  ? heroes.k
+                  : heroes.q
+                ).superpower.icon}{' '}
+                {(gameMode === 'treasure'
+                  ? heroes[currentQuest.heroRole]
+                  : turnColor === 'w'
+                  ? heroes.k
+                  : heroes.q
+                ).customName}
+                :
+              </span>
+              <span className="italic text-amber-100/90">
+                „
+                {(gameMode === 'treasure'
+                  ? heroes[currentQuest.heroRole]
+                  : turnColor === 'w'
+                  ? heroes.k
+                  : heroes.q
+                ).battleCry}
+                “
+              </span>
+            </div>
+          )}
 
           {/* LiGround-Style Live Power Balance Bar (Gold vs. Kristall-Violett) */}
           {gameMode !== 'treasure' && (
@@ -1765,7 +1872,11 @@ export const App: React.FC = () => {
       )}
 
       {/* BOTTOM DOCK: Kid-Helper, Superpowers Toggle, Tipp, Camera Angles & New Game */}
-      <footer className="relative z-10 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2.5 bg-gradient-to-t from-black/90 via-black/70 to-transparent pointer-events-auto">
+      <footer
+        className={`relative z-10 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2.5 bg-gradient-to-t from-black/90 via-black/70 to-transparent pointer-events-auto transition-all duration-300 ${
+          isCleanHudMode ? 'hidden' : ''
+        }`}
+      >
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           <button
             onClick={() => setKidMode((v) => !v)}

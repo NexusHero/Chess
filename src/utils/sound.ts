@@ -1,4 +1,5 @@
-// Web Audio API Dungeon Sound Synthesizer + Real Family Voice Clip Player
+// Web Audio API Dungeon Sound Synthesizer + Real Family Voice Clip Player + Haptics
+import { hapticFX } from './haptics';
 
 class DungeonSoundManager {
   private ctx: AudioContext | null = null;
@@ -34,6 +35,7 @@ class DungeonSoundManager {
   }
 
   public playSelect() {
+    hapticFX.select();
     const ctx = this.getContext();
     if (!ctx) return;
     const now = ctx.currentTime;
@@ -51,6 +53,7 @@ class DungeonSoundManager {
   }
 
   public playMove() {
+    hapticFX.move();
     const ctx = this.getContext();
     if (!ctx) return;
     const now = ctx.currentTime;
@@ -80,6 +83,7 @@ class DungeonSoundManager {
   }
 
   public playCapture(customAudioDataUrl?: string) {
+    hapticFX.capture();
     // Play recorded family voice if available!
     if (customAudioDataUrl) {
       this.playCustomVoice(customAudioDataUrl);
@@ -109,6 +113,7 @@ class DungeonSoundManager {
   }
 
   public playSuperpower() {
+    hapticFX.superpower();
     const ctx = this.getContext();
     if (!ctx) return;
     const now = ctx.currentTime;
@@ -132,6 +137,7 @@ class DungeonSoundManager {
   }
 
   public playTreasureCollect() {
+    hapticFX.treasure();
     const ctx = this.getContext();
     if (!ctx) return;
     const now = ctx.currentTime;
@@ -150,6 +156,7 @@ class DungeonSoundManager {
   }
 
   public playCheck() {
+    hapticFX.check();
     const ctx = this.getContext();
     if (!ctx) return;
     const now = ctx.currentTime;
@@ -168,6 +175,7 @@ class DungeonSoundManager {
   }
 
   public playVictory() {
+    hapticFX.victory();
     const ctx = this.getContext();
     if (!ctx) return;
     const now = ctx.currentTime;
