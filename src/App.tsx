@@ -31,6 +31,7 @@ import {
   Zap,
   Maximize2,
   Minimize2,
+  Music,
 } from 'lucide-react';
 import {
   DEFAULT_FAMILY_HEROES,
@@ -141,6 +142,7 @@ export const App: React.FC = () => {
   const [kidMode, setKidMode] = useState<boolean>(true);
   const [showAllNames, setShowAllNames] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [musicEnabled, setMusicEnabled] = useState<boolean>(false);
   const [cameraPreset, setCameraPreset] = useState<CameraPreset>('orbit');
   const [isHeroModalOpen, setIsHeroModalOpen] = useState<boolean>(false);
   const [isOnlineModalOpen, setIsOnlineModalOpen] = useState<boolean>(false);
@@ -248,6 +250,18 @@ export const App: React.FC = () => {
     setSoundEnabled(next);
     soundFX.enabled = next;
   };
+
+  const toggleMusic = () => {
+    const next = !musicEnabled;
+    setMusicEnabled(next);
+    soundFX.setMusicTheme(currentLevel.specialTheme);
+    soundFX.setMusicEnabled(next);
+    soundFX.playSelect();
+  };
+
+  useEffect(() => {
+    soundFX.setMusicTheme(currentLevel.specialTheme);
+  }, [currentLevel.specialTheme]);
 
   // Legal moves for the currently selected square (respecting Shielded & Frozen squares!)
   const legalMoves = useMemo(() => {
@@ -1232,6 +1246,22 @@ export const App: React.FC = () => {
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
             <span>Familie & Stimmen</span>
+          </button>
+
+          <button
+            onClick={toggleMusic}
+            className={`p-2 rounded-xl border transition ${
+              musicEnabled
+                ? 'bg-amber-500/30 text-amber-300 border-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.35)]'
+                : 'bg-black/60 hover:bg-white/15 text-amber-200/60 border-white/15'
+            }`}
+            title={
+              musicEnabled
+                ? 'Atmosphärische Hintergrund-Musik ausschalten'
+                : 'Atmosphärische Welt-Musik einschalten (Ramadan Oud / Dungeon Harfe / Halloween Celesta)'
+            }
+          >
+            <Music className="w-4 h-4" />
           </button>
 
           <button

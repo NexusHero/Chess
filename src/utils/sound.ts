@@ -4,6 +4,10 @@ import { hapticFX } from './haptics';
 class DungeonSoundManager {
   private ctx: AudioContext | null = null;
   public enabled: boolean = true;
+  public musicEnabled: boolean = false;
+  private musicTimer: number | null = null;
+  private musicStep: number = 0;
+  private musicTheme: 'default' | 'ramadan' | 'halloween' = 'default';
 
   private getContext(): AudioContext | null {
     if (!this.enabled) return null;
@@ -194,6 +198,79 @@ class DungeonSoundManager {
       osc.start(start);
       osc.stop(start + dur);
     });
+  }
+
+  public setMusicTheme(theme?: 'default' | 'ramadan' | 'halloween') {
+    this.musicTheme = theme || 'default';
+  }
+
+  public setMusicEnabled(on: boolean) {
+    this.musicEnabled = on;
+    if (!on) {
+      if (this.musicTimer !== null && typeof window !== 'undefined') {
+        window.clearInterval(this.musicTimer);
+        this.musicTimer = null;
+      }
+      return;
+    }
+    this.startAmbientLoop();
+  }
+
+  private startAmbientLoop() {
+    if (this.musicTimer !== null || typeof window === 'undefined') return;
+    this.playAmbientNote();
+    this.musicTimer = window.setInterval(() => {
+      if (!this.musicEnabled || !this.enabled) return;
+      this.playAmbientNote();
+    }, 1350);
+  }
+
+  private playAmbientNote() {
+    const ctx = this.getContext();
+    if (!ctx) return;
+
+    // Musical scales tailored to each world:
+    // - Ramadan: Warm Hijaz oriental Oud/Ney scale (D4, Eb4, F#4, G4, A4, Bb4, C5, D5)
+    // - Halloween: Playful Celesta harmonic minor (A4, B4, C5, D#5, E5, F5, G#5, A5)
+    // - Dungeon: Cozy Dorian harp arpeggio (D3, A3, D4, E4, F4, G4, A4, C5)
+    const scales = {
+      ramadan: [293.66, 311.13, 369.99, 392.0, 440.0, 466.16, 523.25, 587.33],
+      halloween: [440.0, 493.88, 523.25, 622.25, 659.25, 698.46, 830.61, 880.0],
+      default: [146.83, 220.0, 293.66, 329.63, 349.23, 392.0, 440.0, 523.25],
+    };
+
+    const pattern = [0, 2, 4, 3, 5, 4, 2, 1, 0, 4, 6, 5, 3, 2, 1, 0];
+    const scale = scales[this.musicTheme] || scales.default;
+    const noteIdx = pattern[this.musicStep % pattern.length];
+    this.musicStep++;
+
+    const freq = scale[noteIdx % scale.length];
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+
+    osc.type = this.musicTheme === 'halloween' ? 'sine' : 'triangle';
+    osc.frequency.setValueAtTime(freq, now);
+
+    // Warm low-pass filter so the ambient lute/oud/celesta sounds soft & organic
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(
+      this.musicTheme === 'ramadan' ? 1150 : 1400,
+      now
+    );
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.042, now + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.0008, now + 1.85);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 1.9);
   }
 }
 

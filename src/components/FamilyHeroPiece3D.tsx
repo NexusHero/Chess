@@ -68,14 +68,31 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   const checkAlarmRingRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
 
+  const startPos = useRef(
+    new THREE.Vector3(...(fromPosition && isLastMoved ? fromPosition : targetPosition))
+  );
   const currentPos = useRef(
     new THREE.Vector3(...(fromPosition && isLastMoved ? fromPosition : targetPosition))
   );
   const prevTarget = useRef(new THREE.Vector3(...targetPosition));
   const jumpProgress = useRef(fromPosition && isLastMoved ? 0 : 1);
-  const landingDustAlpha = useRef(fromPosition && isLastMoved ? 1 : 0);
+  const landingDustAlpha = useRef(0);
+  const hasTriggeredLandingDust = useRef(!(fromPosition && isLastMoved));
   const promotionSpin = useRef(isPromoted ? Math.PI * 4 : 0);
   const selectBounce = useRef(0);
+  const [showActionBubble, setShowActionBubble] = useState<boolean>(
+    Boolean(fromPosition && isLastMoved)
+  );
+
+  useEffect(() => {
+    if (isLastMoved && fromPosition) {
+      setShowActionBubble(true);
+      const timer = setTimeout(() => setShowActionBubble(false), 2100);
+      return () => clearTimeout(timer);
+    } else {
+      setShowActionBubble(false);
+    }
+  }, [isLastMoved, fromPosition]);
 
   useEffect(() => {
     if (isSelected) {
@@ -155,19 +172,29 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
     const targetVec = new THREE.Vector3(...targetPosition);
     if (prevTarget.current.distanceTo(targetVec) > 0.05) {
+      startPos.current.copy(currentPos.current);
       prevTarget.current.copy(targetVec);
       jumpProgress.current = 0;
-      landingDustAlpha.current = 1;
+      hasTriggeredLandingDust.current = false;
     }
 
     if (jumpProgress.current < 1) {
-      jumpProgress.current = Math.min(1, jumpProgress.current + delta * 2.6);
+      jumpProgress.current = Math.min(1, jumpProgress.current + delta * 2.35);
+      // Smooth cubic ease-in-out horizontal interpolation synchronized with the jump arc!
+      const t = jumpProgress.current;
+      const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      currentPos.current.lerpVectors(startPos.current, targetVec, eased);
+
+      if (jumpProgress.current >= 0.94 && !hasTriggeredLandingDust.current) {
+        hasTriggeredLandingDust.current = true;
+        landingDustAlpha.current = 1;
+      }
+    } else {
+      currentPos.current.lerp(targetVec, Math.min(1, delta * 12));
     }
 
-    currentPos.current.lerp(targetVec, Math.min(1, delta * 9.5));
-
     // 1. Parabolic hop arc (extra high flip arc for Daughter / Knight + attacking lunge!)
-    const arcMultiplier = role === 'n' ? 1.45 : isAttacking ? 0.95 : 0.62;
+    const arcMultiplier = role === 'n' ? 1.55 : isAttacking ? 1.05 : 0.72;
     const hopHeight = Math.sin(jumpProgress.current * Math.PI) * arcMultiplier;
 
     // 2. Selected hover lift
@@ -204,10 +231,12 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         : 0;
     groupRef.current.rotation.x = hopTilt;
 
-    // Promotion coronation spin
+    // Promotion coronation spin OR Knight mid-air 360 pirouette
     if (promotionSpin.current > 0) {
       promotionSpin.current = Math.max(0, promotionSpin.current - delta * 8);
       groupRef.current.rotation.y = promotionSpin.current;
+    } else if (role === 'n' && jumpProgress.current < 1) {
+      groupRef.current.rotation.y = jumpProgress.current * Math.PI * 2;
     } else if (isCelebrating) {
       groupRef.current.rotation.y =
         Math.sin(state.clock.elapsedTime * 4 + targetPosition[2]) * 0.25;
@@ -572,8 +601,41 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
           </mesh>
         </group>
 
+        {/* 3D Comic Speech Bubble for King in Check or Hero Action! */}
+        {(isCheckThreatened || showActionBubble) && (
+          <Html
+            position={[0, baseScale * 0.68, 0]}
+            center
+            zIndexRange={[20, 0]}
+          >
+            {isCheckThreatened ? (
+              <div className="pointer-events-none px-2.5 py-1 rounded-2xl bg-red-600/95 text-white text-[11px] font-black whitespace-nowrap shadow-[0_0_20px_rgba(239,68,68,0.8)] border-2 border-amber-300 animate-bounce">
+                😱 SCHACH! Beschützt mich!
+              </div>
+            ) : (
+              <div
+                className={`pointer-events-none px-2.5 py-0.5 rounded-2xl text-[10px] font-extrabold whitespace-nowrap shadow-lg border backdrop-blur-md animate-pulse ${
+                  isGoldTeam
+                    ? 'bg-amber-950/95 text-amber-200 border-amber-400'
+                    : 'bg-purple-950/95 text-purple-200 border-purple-400'
+                }`}
+              >
+                {isPromoted
+                  ? `👑 ${displayName} gekrönt!`
+                  : isAttacking
+                  ? `⚔️ „${heroConfig.battleCry}“`
+                  : role === 'n'
+                  ? `✨ Hoppala-Sprung!`
+                  : `⚡ ${displayName}!`}
+              </div>
+            )}
+          </Html>
+        )}
+
         {/* Floating RPG Hero Badge */}
-        {(hovered || isSelected || showNameplate || isShielded || isFrozen) && (
+        {!isCheckThreatened &&
+          !showActionBubble &&
+          (hovered || isSelected || showNameplate || isShielded || isFrozen) && (
           <Html
             position={[0, baseScale * 0.55, 0]}
             center

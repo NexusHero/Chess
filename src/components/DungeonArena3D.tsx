@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   Billboard,
@@ -1200,6 +1200,7 @@ const DungeonStoneTile3D: React.FC<{
   runeGlowColor: string;
   specialTheme?: SpecialThemeType;
   onSquareClick: (sq: Square) => void;
+  onSquareHover?: (sq: Square | null) => void;
 }> = ({
   sq,
   rIdx,
@@ -1218,6 +1219,7 @@ const DungeonStoneTile3D: React.FC<{
   runeGlowColor,
   specialTheme = 'default',
   onSquareClick,
+  onSquareHover,
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const pressDepth = useRef(0);
@@ -1315,6 +1317,13 @@ const DungeonStoneTile3D: React.FC<{
           onClick={(e) => {
             e.stopPropagation();
             onSquareClick(sq);
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            onSquareHover?.(sq);
+          }}
+          onPointerOut={() => {
+            onSquareHover?.(null);
           }}
         >
           <boxGeometry args={[0.86, 0.04, 0.86]} />
@@ -1762,30 +1771,44 @@ const CameraDirector: React.FC<{
   const { camera } = useThree();
   const controlsRef = useRef<any>(null);
   const shakeTimer = useRef(0);
+  const actionZoomTimer = useRef(0);
+  const wasCapturing = useRef(false);
 
   useEffect(() => {
     if (captureEffect) {
-      shakeTimer.current = 0.55;
+      shakeTimer.current = 0.58;
+      actionZoomTimer.current = 1.25;
+      wasCapturing.current = true;
     }
   }, [captureEffect]);
 
   useFrame((state, delta) => {
     if (!controlsRef.current) return;
 
-    // Dramatic Battle-Chess Close-up Zoom + Impact Screen-Shake during a Capture!
+    // Dramatic Battle-Chess Close-up Action Kill-Cam Zoom + Impact Screen-Shake during a Capture!
     if (captureEffect) {
       const [tx, , tz] = squareToWorld(captureEffect.square);
       let shakeX = 0;
       let shakeY = 0;
       if (shakeTimer.current > 0) {
         shakeTimer.current = Math.max(0, shakeTimer.current - delta);
-        const power = shakeTimer.current * 0.32;
+        const power = shakeTimer.current * 0.36;
         shakeX = Math.sin(state.clock.elapsedTime * 55) * power;
         shakeY = Math.cos(state.clock.elapsedTime * 48) * power;
       }
+      if (actionZoomTimer.current > 0) {
+        actionZoomTimer.current = Math.max(0, actionZoomTimer.current - delta);
+        // Smoothly pull camera ~28% closer to the clash square for cinematic impact
+        const zoomTargetPos = new THREE.Vector3(
+          tx * 0.55,
+          5.35,
+          tz * 0.55 + ( preset === 'table-black' ? -4.4 : 4.6 )
+        );
+        camera.position.lerp(zoomTargetPos, delta * 3.2);
+      }
       controlsRef.current.target.lerp(
-        new THREE.Vector3(tx * 0.65 + shakeX, 0.45 + shakeY, tz * 0.65),
-        delta * 4.5
+        new THREE.Vector3(tx * 0.65 + shakeX, 0.48 + shakeY, tz * 0.65),
+        delta * 5.0
       );
       controlsRef.current.update();
       return;
@@ -1800,6 +1823,12 @@ const CameraDirector: React.FC<{
       desiredPos = new THREE.Vector3(0, 5.4, 5.9);
     } else if (preset === 'table-black') {
       desiredPos = new THREE.Vector3(0, 5.4, -5.9);
+    } else if (wasCapturing.current) {
+      // Smoothly return to default orbit framing after the Kill-Cam zoom finishes
+      desiredPos = new THREE.Vector3(0, 8.2, 6.8);
+      if (camera.position.distanceTo(desiredPos) < 0.15) {
+        wasCapturing.current = false;
+      }
     }
 
     if (desiredPos) {
@@ -1845,6 +1874,15 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
   captureEffect,
   onSquareClick,
 }) => {
+  const [hoveredSquare, setHoveredSquare] = useState<Square | null>(null);
+  const hoveredLegalMove = useMemo(
+    () =>
+      selectedSquare && hoveredSquare
+        ? legalMoves.find((m) => m.to === hoveredSquare) || null
+        : null,
+    [selectedSquare, hoveredSquare, legalMoves]
+  );
+
   const boardPieces = useMemo(() => {
     const b = game.board();
     const list: {
@@ -2071,39 +2109,100 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
                 runeGlowColor={level.theme.runeGlowColor}
                 specialTheme={level.specialTheme}
                 onSquareClick={onSquareClick}
+                onSquareHover={setHoveredSquare}
               />
             );
           })
         )}
       </group>
 
+      {/* Live Tactical 3D Jump-Arc Preview Bridge when Hovering a Legal Move Square */}
+      {selectedSquare && hoveredLegalMove && (
+        <group>
+          <QuadraticBezierLine
+            start={(() => {
+              const [x, , z] = squareToWorld(selectedSquare);
+              return [x, 0.25, z] as [number, number, number];
+            })()}
+            end={(() => {
+              const [x, , z] = squareToWorld(hoveredLegalMove.to);
+              return [x, 0.25, z] as [number, number, number];
+            })()}
+            mid={(() => {
+              const [x1, , z1] = squareToWorld(selectedSquare);
+              const [x2, , z2] = squareToWorld(hoveredLegalMove.to);
+              return [(x1 + x2) / 2, 1.45, (z1 + z2) / 2] as [
+                number,
+                number,
+                number,
+              ];
+            })()}
+            color={hoveredLegalMove.isCapture ? '#ef4444' : '#34d399'}
+            lineWidth={4}
+          />
+          <mesh
+            position={(() => {
+              const [x, , z] = squareToWorld(hoveredLegalMove.to);
+              return [x, 0.08, z] as [number, number, number];
+            })()}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <ringGeometry args={[0.32, 0.44, 28]} />
+            <meshBasicMaterial
+              color={hoveredLegalMove.isCapture ? '#ef4444' : '#34d399'}
+              side={THREE.DoubleSide}
+              transparent
+              opacity={0.95}
+            />
+          </mesh>
+        </group>
+      )}
+
       {/* Glowing 3D Parabolic Trajectory Arc for Last Move & Hint Move */}
-      {lastMove && (
-        <QuadraticBezierLine
-          start={(() => {
-            const [x, , z] = squareToWorld(lastMove.from);
-            return [x, 0.16, z] as [number, number, number];
-          })()}
-          end={(() => {
-            const [x, , z] = squareToWorld(lastMove.to);
-            return [x, 0.16, z] as [number, number, number];
-          })()}
-          mid={(() => {
-            const [x1, , z1] = squareToWorld(lastMove.from);
-            const [x2, , z2] = squareToWorld(lastMove.to);
-            return [(x1 + x2) / 2, 1.15, (z1 + z2) / 2] as [
-              number,
-              number,
-              number,
-            ];
-          })()}
-          color={level.theme.runeGlowColor}
-          lineWidth={2.5}
-          dashed
-          dashScale={6}
-          dashSize={0.4}
-          dashOffset={0}
-        />
+      {lastMove && lastMove.from !== lastMove.to && (
+        <group>
+          <QuadraticBezierLine
+            start={(() => {
+              const [x, , z] = squareToWorld(lastMove.from);
+              return [x, 0.16, z] as [number, number, number];
+            })()}
+            end={(() => {
+              const [x, , z] = squareToWorld(lastMove.to);
+              return [x, 0.16, z] as [number, number, number];
+            })()}
+            mid={(() => {
+              const [x1, , z1] = squareToWorld(lastMove.from);
+              const [x2, , z2] = squareToWorld(lastMove.to);
+              return [(x1 + x2) / 2, 1.18, (z1 + z2) / 2] as [
+                number,
+                number,
+                number,
+              ];
+            })()}
+            color={level.theme.runeGlowColor}
+            lineWidth={3.2}
+            dashed
+            dashScale={5}
+            dashSize={0.45}
+            dashOffset={0}
+          />
+          {/* Origin Footprint Rune Ring */}
+          <mesh
+            position={(() => {
+              const [x, , z] = squareToWorld(lastMove.from);
+              return [x, 0.068, z] as [number, number, number];
+            })()}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <ringGeometry args={[0.22, 0.31, 24]} />
+            <meshBasicMaterial
+              color={level.theme.runeGlowColor}
+              side={THREE.DoubleSide}
+              transparent
+              opacity={0.75}
+            />
+          </mesh>
+        </group>
       )}
 
       {hintMove && (
