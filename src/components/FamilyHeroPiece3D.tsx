@@ -2,11 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Billboard, Html, Sparkles, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
-import { FamilyHeroConfig, PieceRole } from '../data/familyConfig';
+import {
+  DungeonLevelId,
+  FamilyHeroConfig,
+  PieceRole,
+  SpecialThemeType,
+} from '../data/familyConfig';
 
 interface FamilyHeroPieceProps {
   role: PieceRole;
   color: 'w' | 'b';
+  levelId?: DungeonLevelId;
+  specialTheme?: SpecialThemeType;
   targetPosition: [number, number, number];
   fromPosition?: [number, number, number] | null; // Previous position for smooth hop-arc & dust burst
   heroConfig: FamilyHeroConfig;
@@ -21,6 +28,130 @@ interface FamilyHeroPieceProps {
   isCelebrating?: boolean; // Victory dance hop at end of match
   showNameplate: boolean;
   onSelect: () => void;
+}
+
+// Cache for Team-Tinted & Theme-Styled Character Cutout Textures so Team Gold ('w') and Enemy ('b') are 100% distinct!
+const styledHeroTextureCache = new Map<string, THREE.CanvasTexture>();
+
+function getStyledTeamAndThemeTexture(
+  baseTexture: THREE.Texture,
+  pngPath: string,
+  color: 'w' | 'b',
+  levelId: number,
+  specialTheme: SpecialThemeType
+): THREE.Texture {
+  const img = baseTexture.image as HTMLImageElement | undefined;
+  if (!img || !img.width || typeof document === 'undefined') {
+    return baseTexture;
+  }
+
+  const cacheKey = `${pngPath}|${color}|${levelId}|${specialTheme}`;
+  const cached = styledHeroTextureCache.get(cacheKey);
+  if (cached) return cached;
+
+  const W = 512;
+  const H = 560;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+
+  // Offscreen silhouette stamp canvas for crisp outer team contour
+  const silCanvas = document.createElement('canvas');
+  silCanvas.width = W;
+  silCanvas.height = H;
+  const silCtx = silCanvas.getContext('2d')!;
+
+  silCtx.save();
+  if (color === 'b') {
+    // Flip Enemy Team horizontally so the two armies face opposite directions!
+    silCtx.translate(W, 0);
+    silCtx.scale(-1, 1);
+  }
+  silCtx.drawImage(img, 24, 24, W - 48, H - 48);
+  silCtx.globalCompositeOperation = 'source-in';
+  // Bold team contour color: Radiant Sun-Gold for Player ('w'), Neon Shadow-Purple/Crimson for Enemy ('b')
+  silCtx.fillStyle =
+    color === 'w'
+      ? specialTheme === 'ramadan'
+        ? '#fde047'
+        : '#fbbf24'
+      : specialTheme === 'halloween'
+      ? '#f97316'
+      : '#c084fc';
+  silCtx.fillRect(0, 0, W, H);
+  silCtx.restore();
+
+  // 1. Draw thick 12-direction silhouette outline around the character
+  const outlineRadius = color === 'b' ? 11 : 9;
+  for (let i = 0; i < 12; i++) {
+    const angle = (i * Math.PI * 2) / 12;
+    const ox = Math.cos(angle) * outlineRadius;
+    const oy = Math.sin(angle) * outlineRadius;
+    ctx.drawImage(silCanvas, ox, oy);
+  }
+
+  // 2. Draw character cutout onto a character layer for team & theme color grading
+  const charCanvas = document.createElement('canvas');
+  charCanvas.width = W;
+  charCanvas.height = H;
+  const charCtx = charCanvas.getContext('2d')!;
+
+  charCtx.save();
+  if (color === 'b') {
+    charCtx.translate(W, 0);
+    charCtx.scale(-1, 1);
+  }
+  charCtx.drawImage(img, 24, 24, W - 48, H - 48);
+  charCtx.restore();
+
+  // Apply unmistakable Team & World-Theme Color Grading inside the character's alpha mask!
+  charCtx.save();
+  charCtx.globalCompositeOperation = 'source-atop';
+
+  if (color === 'w') {
+    // TEAM GOLD (Player): Warm sunlit golden-ivory sheen + subtle theme highlight
+    const goldGrad = charCtx.createLinearGradient(0, 0, 0, H);
+    if (specialTheme === 'ramadan') {
+      goldGrad.addColorStop(0, 'rgba(253, 224, 71, 0.22)');
+      goldGrad.addColorStop(1, 'rgba(16, 185, 129, 0.18)');
+    } else if (specialTheme === 'halloween') {
+      goldGrad.addColorStop(0, 'rgba(251, 191, 36, 0.22)');
+      goldGrad.addColorStop(1, 'rgba(249, 115, 22, 0.18)');
+    } else {
+      goldGrad.addColorStop(0, 'rgba(254, 240, 138, 0.20)');
+      goldGrad.addColorStop(1, 'rgba(245, 158, 11, 0.16)');
+    }
+    charCtx.fillStyle = goldGrad;
+    charCtx.fillRect(0, 0, W, H);
+  } else {
+    // TEAM GEGNER ('b'): Distinct Dark Shadow-Amethyst / Obsidian Enemy Army Look!
+    const shadowGrad = charCtx.createLinearGradient(0, 0, 0, H);
+    if (specialTheme === 'halloween') {
+      shadowGrad.addColorStop(0, 'rgba(88, 28, 135, 0.46)');
+      shadowGrad.addColorStop(0.6, 'rgba(46, 16, 101, 0.50)');
+      shadowGrad.addColorStop(1, 'rgba(234, 88, 12, 0.42)');
+    } else if (levelId === 3) {
+      shadowGrad.addColorStop(0, 'rgba(69, 10, 10, 0.46)');
+      shadowGrad.addColorStop(0.6, 'rgba(88, 28, 135, 0.48)');
+      shadowGrad.addColorStop(1, 'rgba(220, 38, 38, 0.42)');
+    } else {
+      shadowGrad.addColorStop(0, 'rgba(76, 29, 149, 0.45)');
+      shadowGrad.addColorStop(0.6, 'rgba(46, 16, 101, 0.50)');
+      shadowGrad.addColorStop(1, 'rgba(168, 85, 247, 0.42)');
+    }
+    charCtx.fillStyle = shadowGrad;
+    charCtx.fillRect(0, 0, W, H);
+  }
+  charCtx.restore();
+
+  ctx.drawImage(charCanvas, 0, 0);
+
+  const outTex = new THREE.CanvasTexture(canvas);
+  outTex.colorSpace = THREE.SRGBColorSpace;
+  outTex.needsUpdate = true;
+  styledHeroTextureCache.set(cacheKey, outTex);
+  return outTex;
 }
 
 // Clear Art-Director Size & Pedestal Hierarchy so Front & Back Ranks never occlude each other!
@@ -45,6 +176,8 @@ const ROLE_PEDESTAL_HEIGHT: Record<PieceRole, number> = {
 export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   role,
   color,
+  levelId = 1,
+  specialTheme = 'default',
   targetPosition,
   fromPosition = null,
   heroConfig,
@@ -120,19 +253,99 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   const texture = useTexture(pngPath);
   texture.colorSpace = THREE.SRGBColorSpace;
 
+  const styledTexture = useMemo(
+    () =>
+      getStyledTeamAndThemeTexture(
+        texture,
+        pngPath,
+        color,
+        levelId,
+        specialTheme
+      ),
+    [texture, pngPath, color, levelId, specialTheme]
+  );
+
   const displayName =
     useSecondarySkin && heroConfig.secondaryCustomName
       ? heroConfig.secondaryCustomName
       : heroConfig.customName;
 
   const isGoldTeam = color === 'w';
-  const primaryTeamColor = isGoldTeam ? '#fbbf24' : '#a855f7';
+  const primaryTeamColor = isGoldTeam
+    ? specialTheme === 'ramadan'
+      ? '#fde047'
+      : '#fbbf24'
+    : specialTheme === 'halloween'
+    ? '#f97316'
+    : levelId === 3
+    ? '#ef4444'
+    : '#a855f7';
   const secondaryTeamColor = isGoldTeam ? '#fef3c7' : '#e9d5ff';
-  // Distinct warm sandstone-gold vs deep royal obsidian-violet stone pedestals
-  const stoneSlabDark = isGoldTeam ? '#5c4938' : '#2a223a';
-  const stoneSlabMid = isGoldTeam ? '#856d56' : '#43365c';
-  const stoneSlabLight = isGoldTeam ? '#ab9176' : '#635185';
-  const reliefBodyColor = isGoldTeam ? '#b47b32' : '#5b21b6';
+
+  // Theme-adapted & Team-distinct Pedestal Palette (Gold Team = Bright Ivory/Emerald/Gold, Enemy Team = Dark Obsidian/Crimson/Shadow-Violet)
+  const stoneSlabDark = isGoldTeam
+    ? specialTheme === 'ramadan'
+      ? '#064e3b'
+      : specialTheme === 'halloween'
+      ? '#451a03'
+      : levelId === 2
+      ? '#0c4a6e'
+      : levelId === 3
+      ? '#7c2d12'
+      : '#785c38'
+    : specialTheme === 'ramadan'
+    ? '#1e1b4b'
+    : specialTheme === 'halloween'
+    ? '#1f122b'
+    : levelId === 3
+    ? '#2a0808'
+    : '#1b112c';
+
+  const stoneSlabMid = isGoldTeam
+    ? specialTheme === 'ramadan'
+      ? '#047857'
+      : specialTheme === 'halloween'
+      ? '#78350f'
+      : levelId === 2
+      ? '#0284c7'
+      : levelId === 3
+      ? '#b45309'
+      : '#b48a54'
+    : specialTheme === 'ramadan'
+    ? '#312e81'
+    : specialTheme === 'halloween'
+    ? '#3b0764'
+    : levelId === 3
+    ? '#450a0a'
+    : '#2e1a47';
+
+  const stoneSlabLight = isGoldTeam
+    ? specialTheme === 'ramadan'
+      ? '#10b981'
+      : specialTheme === 'halloween'
+      ? '#d97706'
+      : levelId === 2
+      ? '#38bdf8'
+      : levelId === 3
+      ? '#f59e0b'
+      : '#fde68a'
+    : specialTheme === 'ramadan'
+    ? '#4c1d95'
+    : specialTheme === 'halloween'
+    ? '#581c87'
+    : levelId === 3
+    ? '#7f1d1d'
+    : '#4c1d95';
+
+  const reliefBodyColor = isGoldTeam
+    ? specialTheme === 'ramadan'
+      ? '#f59e0b'
+      : '#eab308'
+    : specialTheme === 'halloween'
+    ? '#6b21a8'
+    : levelId === 3
+    ? '#991b1b'
+    : '#581c87';
   const baseScale = ROLE_HEIGHT_SCALE[role] || 1.3;
   const bodyHeight = ROLE_PEDESTAL_HEIGHT[role] || 0.15;
   const capY = 0.08 + bodyHeight + 0.025;
@@ -360,14 +573,35 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         document.body.style.cursor = 'auto';
       }}
     >
-      {/* 1. Grounded Team Identification Ring on the Floor (Replaces the muddy background bubble!) */}
+      {/* 0. Generous 360° 3D Cylinder Hitbox so clicking a piece in 3D view NEVER misses! */}
+      <mesh
+        position={[0, topY + baseScale * 0.45, 0]}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+        }}
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          setHovered(true);
+          document.body.style.cursor = 'pointer';
+        }}
+        onPointerOut={() => {
+          setHovered(false);
+          document.body.style.cursor = 'auto';
+        }}
+      >
+        <cylinderGeometry args={[0.46, 0.48, baseScale * 1.15 + 0.35, 16]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+
+      {/* 1. Bold Team Identification Floor Aura (Bright Sun-Gold for Player vs. Dark Shadow-Purple for Enemy!) */}
       <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.36, 0.43, 32]} />
+        <ringGeometry args={[0.34, 0.46, 32]} />
         <meshBasicMaterial
           color={primaryTeamColor}
           side={THREE.DoubleSide}
           transparent
-          opacity={isSelected ? 0.95 : hovered ? 0.8 : 0.52}
+          opacity={isSelected ? 1 : hovered ? 0.92 : 0.78}
         />
       </mesh>
 
@@ -512,6 +746,110 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
             flatShading
           />
         </mesh>
+
+        {/* WORLD-THEME SPECIFIC 3D PEDESTAL REGALIA (Makes Pieces Visually Transform with Each Theme!) */}
+        {specialTheme === 'ramadan' && (
+          /* Ramadan Theme: 2 Miniature Glowing Golden Fanous Lanterns on Front Corners + Oriental Gold Trim */
+          <group>
+            {[-0.28, 0.28].map((lx, lIdx) => (
+              <group key={`fanous-${lIdx}`} position={[lx, 0.08, 0.26]}>
+                <mesh>
+                  <cylinderGeometry args={[0.04, 0.05, 0.11, 6]} />
+                  <meshStandardMaterial
+                    color="#fbbf24"
+                    emissive={isGoldTeam ? '#f59e0b' : '#a855f7'}
+                    emissiveIntensity={1.4}
+                    metalness={0.8}
+                  />
+                </mesh>
+                <mesh position={[0, 0.075, 0]}>
+                  <coneGeometry args={[0.05, 0.05, 6]} />
+                  <meshStandardMaterial color="#d97706" metalness={0.9} />
+                </mesh>
+              </group>
+            ))}
+          </group>
+        )}
+
+        {specialTheme === 'halloween' && (
+          /* Halloween Theme: 2 Glowing 3D Mini Jack-o'-Lantern Pumpkins on the Pedestal Corners */
+          <group>
+            {[-0.28, 0.28].map((px, pIdx) => (
+              <group key={`pumpkin-${pIdx}`} position={[px, 0.06, 0.26]}>
+                <mesh scale={[1, 0.82, 1]}>
+                  <sphereGeometry args={[0.065, 10, 8]} />
+                  <meshStandardMaterial
+                    color={isGoldTeam ? '#f97316' : '#7e22ce'}
+                    emissive={isGoldTeam ? '#ea580c' : '#a855f7'}
+                    emissiveIntensity={0.85}
+                    roughness={0.5}
+                  />
+                </mesh>
+                <mesh position={[0, 0.06, 0]}>
+                  <cylinderGeometry args={[0.01, 0.015, 0.03, 5]} />
+                  <meshStandardMaterial color="#15803d" />
+                </mesh>
+              </group>
+            ))}
+          </group>
+        )}
+
+        {specialTheme !== 'ramadan' &&
+          specialTheme !== 'halloween' &&
+          levelId === 2 && (
+            /* Level 2 (Kristall-Katakomben): 4 Glowing 3D Frost/Mana Crystal Clusters Sprouting from the Pedestal */
+            <group>
+              {[
+                [-0.27, 0.24, -0.35],
+                [0.27, 0.24, 0.35],
+                [-0.27, -0.24, -0.35],
+                [0.27, -0.24, 0.35],
+              ].map(([cx, cz, tilt], cIdx) => (
+                <mesh
+                  key={`ice-crys-${cIdx}`}
+                  position={[cx, 0.08, cz]}
+                  rotation={[0.2, 0, tilt]}
+                  scale={[0.05, 0.16, 0.05]}
+                >
+                  <octahedronGeometry args={[1, 0]} />
+                  <meshStandardMaterial
+                    color={isGoldTeam ? '#38bdf8' : '#e879f9'}
+                    emissive={isGoldTeam ? '#0284c7' : '#c026d3'}
+                    emissiveIntensity={1.4}
+                    roughness={0.1}
+                  />
+                </mesh>
+              ))}
+            </group>
+          )}
+
+        {specialTheme !== 'ramadan' &&
+          specialTheme !== 'halloween' &&
+          levelId === 3 && (
+            /* Level 3 (Drachen-Schmiede): 4 Curved Molten Magma Dragon Horns on the Pedestal Corners */
+            <group>
+              {[
+                [-0.28, 0.26, 0.3],
+                [0.28, 0.26, -0.3],
+                [-0.28, -0.26, 0.3],
+                [0.28, -0.26, -0.3],
+              ].map(([hx, hz, tilt], hIdx) => (
+                <mesh
+                  key={`dragon-horn-${hIdx}`}
+                  position={[hx, 0.09, hz]}
+                  rotation={[-0.25, 0, tilt]}
+                >
+                  <coneGeometry args={[0.045, 0.18, 6]} />
+                  <meshStandardMaterial
+                    color={isGoldTeam ? '#fbbf24' : '#dc2626'}
+                    emissive={isGoldTeam ? '#ea580c' : '#991b1b'}
+                    emissiveIntensity={1.2}
+                    roughness={0.3}
+                  />
+                </mesh>
+              ))}
+            </group>
+          )}
       </group>
 
       {/* Castle Stone Battlements around Rook base */}
@@ -642,7 +980,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
           <mesh scale={[baseScale * 0.92, baseScale * 0.92, 1]}>
             <planeGeometry args={[0.94, 1.04]} />
             <meshBasicMaterial
-              map={texture}
+              map={styledTexture}
               transparent
               opacity={0.42}
               alphaTest={0.15}
@@ -659,7 +997,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
           <mesh scale={[baseScale * 0.82, baseScale * 0.82, 1]}>
             <planeGeometry args={[0.94, 1.04]} />
             <meshBasicMaterial
-              map={texture}
+              map={styledTexture}
               transparent
               opacity={0.24}
               alphaTest={0.15}
@@ -671,7 +1009,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         </Billboard>
       </group>
 
-      {/* 3. Crisp, Silhouette-Clean 3D Family Hero Miniature Standee (NO muddy background disc, NO floating primitive hats!) */}
+      {/* 3. Team-Distinct & Theme-Crested 3D Family Hero Miniature Standee */}
       <Billboard
         position={[0, topY + baseScale * 0.45, 0]}
         follow={true}
@@ -680,24 +1018,97 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         lockZ={false}
       >
         <group ref={spriteRef} scale={[baseScale, baseScale, baseScale]}>
-          {/* Crisp Rim-Light Silhouette Edge (Only visible along the character's exact alpha contour!) */}
+          {/* Unmistakable 3D Team & Theme Crest Behind the Hero's Shoulders:
+              - Team Gold ('w'): Radiant Golden Sun-Halo Arch (or Golden Crescent/Star Arch in Ramadan!)
+              - Enemy Team ('b'): Dark Obsidian-Violet Shadow Ring + Spiked Shadow-Crystal Horns! */}
+          <group position={[0, 0.04, -0.03]}>
+            <mesh>
+              <ringGeometry args={[0.36, 0.44, isGoldTeam ? 24 : 6]} />
+              <meshBasicMaterial
+                color={isGoldTeam ? '#fbbf24' : '#a855f7'}
+                transparent
+                opacity={0.88}
+              />
+            </mesh>
+            {!isGoldTeam && (
+              /* Enemy Army ('b'): 2 Jagged Dark-Crystal Shadow Horns jutting out behind the shoulders so enemies are 100% unmistakable! */
+              <>
+                <mesh
+                  position={[-0.36, 0.24, -0.01]}
+                  rotation={[0, 0, 0.55]}
+                  scale={[0.08, 0.24, 0.05]}
+                >
+                  <octahedronGeometry args={[1, 0]} />
+                  <meshBasicMaterial color="#c084fc" />
+                </mesh>
+                <mesh
+                  position={[0.36, 0.24, -0.01]}
+                  rotation={[0, 0, -0.55]}
+                  scale={[0.08, 0.24, 0.05]}
+                >
+                  <octahedronGeometry args={[1, 0]} />
+                  <meshBasicMaterial color="#c084fc" />
+                </mesh>
+              </>
+            )}
+            {specialTheme === 'ramadan' && (
+              /* Ramadan Theme Finial above the Hero: Golden 8-Pointed Rub el Hizb Star */
+              <group position={[0, 0.48, -0.01]}>
+                <mesh scale={[0.13, 0.13, 0.03]}>
+                  <boxGeometry args={[1, 1, 1]} />
+                  <meshBasicMaterial color={isGoldTeam ? '#fde047' : '#e879f9'} />
+                </mesh>
+                <mesh
+                  scale={[0.13, 0.13, 0.03]}
+                  rotation={[0, 0, Math.PI / 4]}
+                >
+                  <boxGeometry args={[1, 1, 1]} />
+                  <meshBasicMaterial color={isGoldTeam ? '#f59e0b' : '#a855f7'} />
+                </mesh>
+              </group>
+            )}
+            {specialTheme === 'halloween' && (
+              /* Halloween Theme Finial behind the Hero: Gothic Bat-Crest Diamonds */
+              <group position={[0, 0.46, -0.01]}>
+                <mesh
+                  position={[-0.14, 0, 0]}
+                  rotation={[0, 0, 0.4]}
+                  scale={[0.12, 0.05, 0.02]}
+                >
+                  <octahedronGeometry args={[1, 0]} />
+                  <meshBasicMaterial color="#f97316" />
+                </mesh>
+                <mesh
+                  position={[0.14, 0, 0]}
+                  rotation={[0, 0, -0.4]}
+                  scale={[0.12, 0.05, 0.02]}
+                >
+                  <octahedronGeometry args={[1, 0]} />
+                  <meshBasicMaterial color="#f97316" />
+                </mesh>
+              </group>
+            )}
+          </group>
+
+          {/* Crisp Rim-Light Silhouette Edge */}
           <mesh position={[0, 0, -0.018]}>
-            <planeGeometry args={[0.97, 1.07]} />
+            <planeGeometry args={[0.98, 1.08]} />
             <meshBasicMaterial
-              map={texture}
+              map={styledTexture}
               transparent
-              alphaTest={0.18}
+              alphaTest={0.14}
               color={isSelected ? '#ffffff' : primaryTeamColor}
             />
           </mesh>
 
-          {/* Main High-Contrast Character Cutout */}
+          {/* Main Team-Graded & Outlined Character Cutout */}
           <mesh castShadow>
             <planeGeometry args={[0.94, 1.04]} />
             <meshStandardMaterial
-              map={texture}
+              map={styledTexture}
+              color={isGoldTeam ? '#ffffff' : '#e9d5ff'}
               transparent
-              alphaTest={0.12}
+              alphaTest={0.1}
               roughness={0.35}
               metalness={0.08}
               emissive={
@@ -707,10 +1118,18 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
                   ? '#b45309'
                   : isSelected
                   ? primaryTeamColor
-                  : '#000000'
+                  : isGoldTeam
+                  ? '#451a03'
+                  : '#3b0764'
               }
               emissiveIntensity={
-                isFrozen || isShielded ? 0.45 : isSelected ? 0.18 : 0
+                isFrozen || isShielded
+                  ? 0.45
+                  : isSelected
+                  ? 0.22
+                  : isGoldTeam
+                  ? 0.06
+                  : 0.18
               }
             />
           </mesh>
