@@ -49,111 +49,201 @@ const ROLE_PEDESTAL_HEIGHT: Record<PieceRole, number> = {
   p: 0.1,
 };
 
-// Cached LatheGeometries for smooth, authentic 3D sculpted chess & RPG bodies!
-const latheCache = new Map<string, THREE.LatheGeometry>();
-function getRoleLatheGeometry(role: PieceRole): THREE.LatheGeometry {
-  const cached = latheCache.get(role);
-  if (cached) return cached;
+// Cached Procedural Black-and-White Houndstooth (Hahnentritt) Texture for Cousine Rune ('p' secondary skin)!
+let cachedHoundstoothTex: THREE.CanvasTexture | null = null;
+function getHoundstoothTexture(): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+  if (cachedHoundstoothTex) return cachedHoundstoothTex;
 
-  let profile: [number, number][];
-  switch (role) {
-    case 'k':
-      // Regal broad-shouldered King silhouette
-      profile = [
-        [0.01, 0.0],
-        [0.27, 0.0],
-        [0.28, 0.06],
-        [0.22, 0.12],
-        [0.17, 0.28],
-        [0.15, 0.46],
-        [0.22, 0.64],
-        [0.24, 0.72],
-        [0.16, 0.78],
-        [0.01, 0.8],
-      ];
-      break;
-    case 'q':
-      // Graceful hourglass Archmage Queen gown silhouette
-      profile = [
-        [0.01, 0.0],
-        [0.26, 0.0],
-        [0.27, 0.05],
-        [0.21, 0.14],
-        [0.13, 0.34],
-        [0.11, 0.5],
-        [0.18, 0.64],
-        [0.2, 0.7],
-        [0.13, 0.75],
-        [0.01, 0.77],
-      ];
-      break;
-    case 'r':
-      // Heavy crenellated Fortress Rook tower silhouette
-      profile = [
-        [0.01, 0.0],
-        [0.27, 0.0],
-        [0.28, 0.07],
-        [0.23, 0.15],
-        [0.2, 0.42],
-        [0.21, 0.58],
-        [0.25, 0.64],
-        [0.25, 0.74],
-        [0.01, 0.75],
-      ];
-      break;
-    case 'b':
-      // Sleek robed Bishop / Seer silhouette
-      profile = [
-        [0.01, 0.0],
-        [0.24, 0.0],
-        [0.25, 0.05],
-        [0.19, 0.14],
-        [0.14, 0.36],
-        [0.13, 0.52],
-        [0.18, 0.62],
-        [0.14, 0.68],
-        [0.01, 0.7],
-      ];
-      break;
-    case 'n':
-      // Armored Knight base pedestal & chest column
-      profile = [
-        [0.01, 0.0],
-        [0.25, 0.0],
-        [0.26, 0.06],
-        [0.2, 0.14],
-        [0.16, 0.28],
-        [0.18, 0.42],
-        [0.01, 0.45],
-      ];
-      break;
-    default:
-      // Nimble Ranger / Shieldmaiden Pawn silhouette
-      profile = [
-        [0.01, 0.0],
-        [0.22, 0.0],
-        [0.23, 0.05],
-        [0.17, 0.12],
-        [0.13, 0.28],
-        [0.12, 0.42],
-        [0.17, 0.52],
-        [0.12, 0.56],
-        [0.01, 0.58],
-      ];
-      break;
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = '#0f172a';
+    // Classic 4x4 tiled Houndstooth (Hahnentritt) motif
+    for (let y = 0; y < 64; y += 32) {
+      for (let x = 0; x < 64; x += 32) {
+        // Main black square
+        ctx.fillRect(x, y, 16, 16);
+        // Upper-right & lower-left jagged tooth diagonals
+        ctx.beginPath();
+        ctx.moveTo(x + 16, y);
+        ctx.lineTo(x + 28, y);
+        ctx.lineTo(x + 16, y + 12);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(x, y + 16);
+        ctx.lineTo(x + 12, y + 16);
+        ctx.lineTo(x, y + 28);
+        ctx.closePath();
+        ctx.fill();
+
+        // Bottom-right diagonal wing
+        ctx.beginPath();
+        ctx.moveTo(x + 16, y + 16);
+        ctx.lineTo(x + 32, y + 16);
+        ctx.lineTo(x + 20, y + 28);
+        ctx.lineTo(x + 16, y + 24);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
   }
-
-  const points = profile.map(([r, y]) => new THREE.Vector2(r, y));
-  const geom = new THREE.LatheGeometry(points, 24);
-  geom.computeVertexNormals();
-  latheCache.set(role, geom);
-  return geom;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 3);
+  tex.needsUpdate = true;
+  cachedHoundstoothTex = tex;
+  return tex;
 }
 
 /**
- * Authentic 3D Sculpted Chess & RPG Hero Figure!
- * Distinctly colored & armored for Team Gold ('w') vs. Enemy Shadow Team ('b'),
- * and dynamically adapts its 3D armor, crown & weapons to the 5 World Themes!
+ * 3D Expressive Pixar/Tabletop Chibi Head for our Family Heroes!
+ * Renders warm human skin (or dark-elf shadow skin for Enemy Clones),
+ * big expressive eyes with white catchlights, eyebrows, nose, ears, and smile.
+ */
+const ChibiHead3D: React.FC<{
+  headY: number;
+  headRadius?: number;
+  skinColor: string;
+  eyeColor: string;
+  browColor: string;
+  isGold: boolean;
+  hasRosyCheeks?: boolean;
+  hasBigToothGrin?: boolean;
+  hasRedLips?: boolean;
+}> = ({
+  headY,
+  headRadius = 0.155,
+  skinColor,
+  eyeColor,
+  browColor,
+  isGold,
+  hasRosyCheeks = false,
+  hasBigToothGrin = false,
+  hasRedLips = false,
+}) => {
+  return (
+    <group position={[0, headY, 0]}>
+      {/* Main Chibi Head Sphere */}
+      <mesh scale={[1, 0.96, 0.94]} castShadow receiveShadow>
+        <sphereGeometry args={[headRadius, 22, 18]} />
+        <meshStandardMaterial color={skinColor} roughness={0.42} metalness={0.05} />
+      </mesh>
+
+      {/* Cute Left & Right Ears */}
+      <mesh position={[-headRadius * 0.95, -0.01, 0]} scale={[0.45, 0.75, 0.5]}>
+        <sphereGeometry args={[0.045, 10, 10]} />
+        <meshStandardMaterial color={skinColor} roughness={0.45} />
+      </mesh>
+      <mesh position={[headRadius * 0.95, -0.01, 0]} scale={[0.45, 0.75, 0.5]}>
+        <sphereGeometry args={[0.045, 10, 10]} />
+        <meshStandardMaterial color={skinColor} roughness={0.45} />
+      </mesh>
+
+      {/* Cute Button Nose */}
+      <mesh position={[0, -0.01, headRadius * 0.92]} scale={[0.9, 0.75, 0.9]}>
+        <sphereGeometry args={[0.022, 10, 10]} />
+        <meshStandardMaterial color={skinColor} roughness={0.38} />
+      </mesh>
+
+      {/* Expressive 3D Eyes (Left & Right) */}
+      {[-1, 1].map((side) => {
+        const ex = side * headRadius * 0.36;
+        const ey = 0.015;
+        const ez = headRadius * 0.84;
+        return (
+          <group key={`eye-${side}`} position={[ex, ey, ez]}>
+            {/* White Sclera (or glowing shadow eye for Enemy Team) */}
+            <mesh scale={[1, 1.15, 0.5]}>
+              <sphereGeometry args={[0.032, 12, 12]} />
+              <meshBasicMaterial color={isGold ? '#ffffff' : eyeColor} />
+            </mesh>
+            {isGold && (
+              <>
+                {/* Colored Iris */}
+                <mesh position={[0, 0, 0.008]} scale={[0.78, 0.92, 0.45]}>
+                  <sphereGeometry args={[0.028, 12, 12]} />
+                  <meshBasicMaterial color={eyeColor} />
+                </mesh>
+                {/* Dark Pupil */}
+                <mesh position={[0, 0, 0.014]} scale={[0.48, 0.58, 0.4]}>
+                  <sphereGeometry args={[0.024, 10, 10]} />
+                  <meshBasicMaterial color="#09090b" />
+                </mesh>
+                {/* Pixar White Catchlight Sparkle */}
+                <mesh position={[0.008, 0.01, 0.022]}>
+                  <sphereGeometry args={[0.007, 8, 8]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+              </>
+            )}
+          </group>
+        );
+      })}
+
+      {/* Sculpted Eyebrows */}
+      {[-1, 1].map((side) => (
+        <mesh
+          key={`brow-${side}`}
+          position={[side * headRadius * 0.36, 0.064, headRadius * 0.86]}
+          rotation={[0, 0, side * (isGold ? -0.1 : 0.24)]}
+        >
+          <boxGeometry args={[0.056, 0.014, 0.016]} />
+          <meshStandardMaterial color={browColor} roughness={0.6} />
+        </mesh>
+      ))}
+
+      {/* Rosy Cheeks for Prinzessin Mini */}
+      {hasRosyCheeks && isGold && (
+        <>
+          <mesh position={[-headRadius * 0.52, -0.025, headRadius * 0.78]} scale={[1.2, 0.75, 0.4]}>
+            <sphereGeometry args={[0.024, 10, 10]} />
+            <meshBasicMaterial color="#fb7185" transparent opacity={0.65} />
+          </mesh>
+          <mesh position={[headRadius * 0.52, -0.025, headRadius * 0.78]} scale={[1.2, 0.75, 0.4]}>
+            <sphereGeometry args={[0.024, 10, 10]} />
+            <meshBasicMaterial color="#fb7185" transparent opacity={0.65} />
+          </mesh>
+        </>
+      )}
+
+      {/* Mouth: Either Cousin Tank's Big White Grin, Red Smiling Lips, or Warm Smile */}
+      {hasBigToothGrin ? (
+        <mesh position={[0, -0.052, headRadius * 0.88]} scale={[1.2, 0.65, 0.5]}>
+          <boxGeometry args={[0.072, 0.036, 0.024]} />
+          <meshBasicMaterial color={isGold ? '#ffffff' : '#f43f5e'} />
+        </mesh>
+      ) : (
+        <mesh
+          position={[0, -0.048, headRadius * 0.89]}
+          rotation={[Math.PI, 0, 0]}
+        >
+          <torusGeometry args={[0.024, 0.006, 8, 16, Math.PI]} />
+          <meshBasicMaterial
+            color={hasRedLips ? (isGold ? '#e11d48' : '#a855f7') : '#7c2d12'}
+          />
+        </mesh>
+      )}
+    </group>
+  );
+};
+
+/**
+ * Authentic 3D Sculpted Chibi Miniatures of our 7 Original Family Heroes!
+ *  - 'k' (König Baba): Dark full beard, golden crown, silver/gold eagle chestplate, red cape & runic broadsword
+ *  - 'q' (Königin Anne): Royal purple hijab, golden forehead tiara, purple/gold robe & twin floating magic spheres
+ *  - 'b' (Tante Boss): Voluminous wavy blonde hair, cool black sunglasses, black/gold coat & glowing blue sapphire crystal staff
+ *  - 'n' (Prinzessin Mini): Two cute brown pigtails with red ties, silver knight armor, red cape & sparkling star-rapier
+ *  - 'r' (Cousin Tank): Muscular build, short beard & big white grin, castle-turret shoulder pauldrons & giant armored crusher fists
+ *  - 'p' Skin 1 (Cousine Dolch): Forest-green ranger hood, dark wavy hair, leather tunic & twin glowing cyan daggers
+ *  - 'p' Skin 2 (Cousine Rune): Black-and-silver hijab, black-and-white Houndstooth (Hahnentritt) dress & glowing purple arcane bow
  */
 export const SculptedHeroMesh3D: React.FC<{
   role: PieceRole;
@@ -175,643 +265,894 @@ export const SculptedHeroMesh3D: React.FC<{
   useSecondarySkin = false,
 }) => {
   const isGold = color === 'w';
-  const latheGeom = useMemo(() => getRoleLatheGeometry(role), [role]);
+  const houndstoothTex = useMemo(() => getHoundstoothTexture(), []);
 
-  // 1. Unmistakable Team & Theme PBR Material Palette:
-  //    - Team Gold ('w'): Radiant Ivory/Alabaster & Brushed Gold (or Emerald-Gold in Ramadan!)
-  //    - Enemy Team ('b'): Dark Obsidian-Steel & Glowing Shadow-Violet / Magma-Crimson!
-  const palette = useMemo(() => {
-    if (isGold) {
-      if (specialTheme === 'ramadan') {
-        return {
-          body: '#065f46', // Rich Emerald Silk & Jade
-          armor: '#fbbf24', // Brushed Sultan Gold
-          trim: '#fde047', // Bright Gold Trim
-          cape: '#047857',
-          skin: '#fde68a',
-          eyeGlow: '#34d399',
-          weapon: '#fef08a',
-          emissive: isSelected ? '#fbbf24' : '#064e3b',
-        };
-      }
-      if (specialTheme === 'halloween') {
-        return {
-          body: '#fef3c7', // Warm Ivory
-          armor: '#f97316', // Glowing Pumpkin Bronze
-          trim: '#fde047',
-          cape: '#b45309',
-          skin: '#fde68a',
-          eyeGlow: '#fbbf24',
-          weapon: '#fed7aa',
-          emissive: isSelected ? '#f97316' : '#451a03',
-        };
-      }
-      if (levelId === 2) {
-        return {
-          body: '#e0f2fe', // Frost Alabaster
-          armor: '#fbbf24', // Royal Gold
-          trim: '#38bdf8', // Sapphire Ice Trim
-          cape: '#0284c7',
-          skin: '#fef3c7',
-          eyeGlow: '#38bdf8',
-          weapon: '#bae6fd',
-          emissive: isSelected ? '#38bdf8' : '#0c4a6e',
-        };
-      }
-      if (levelId === 3) {
-        return {
-          body: '#fef3c7',
-          armor: '#f59e0b',
-          trim: '#ef4444', // Dragon-fire ruby trim
-          cape: '#b91c1c',
-          skin: '#fde68a',
-          eyeGlow: '#fde047',
-          weapon: '#fef08a',
-          emissive: isSelected ? '#f59e0b' : '#451a03',
-        };
-      }
-      return {
-        body: useSecondarySkin ? '#fef9c3' : '#fffbeb', // Polished Royal Ivory Marble
-        armor: '#f59e0b', // Radiant Paladin Gold
-        trim: '#fde047',
-        cape: '#d97706',
-        skin: '#fde68a',
-        eyeGlow: '#38bdf8',
-        weapon: '#fef08a',
-        emissive: isSelected ? '#fbbf24' : '#451a03',
-      };
-    } else {
-      // ENEMY TEAM ('b'): Dark Obsidian / Shadow-Amethyst / Crimson Dread-Armor
-      if (specialTheme === 'ramadan') {
-        return {
-          body: '#1e1b4b', // Deep Midnight Indigo
-          armor: '#9333ea', // Royal Amethyst
-          trim: '#e879f9',
-          cape: '#3b0764',
-          skin: '#581c87',
-          eyeGlow: '#f43f5e',
-          weapon: '#d8b4fe',
-          emissive: isSelected ? '#c084fc' : '#2e1065',
-        };
-      }
-      if (specialTheme === 'halloween') {
-        return {
-          body: '#18181b', // Night Obsidian
-          armor: '#7e22ce', // Cursed Witch-Violet
-          trim: '#f97316', // Jack-o'-Lantern Orange
-          cape: '#3b0764',
-          skin: '#4c1d95',
-          eyeGlow: '#f97316',
-          weapon: '#fdba74',
-          emissive: isSelected ? '#f97316' : '#3b0764',
-        };
-      }
-      if (levelId === 3) {
-        return {
-          body: '#1c1917', // Charred Volcanic Obsidian
-          armor: '#991b1b', // Blood-Magma Crimson
-          trim: '#f97316', // Molten Lava
-          cape: '#450a0a',
-          skin: '#450a0a',
-          eyeGlow: '#ef4444',
-          weapon: '#fca5a5',
-          emissive: isSelected ? '#ef4444' : '#450a0a',
-        };
-      }
-      return {
-        body: '#1e1b4b', // Dark Obsidian-Indigo
-        armor: '#7e22ce', // Shadow Amethyst
-        trim: '#c084fc', // Neon Violet Trim
-        cape: '#3b0764',
-        skin: '#4c1d95',
-        eyeGlow: '#f43f5e', // Menacing Crimson-Magenta Eyes
-        weapon: '#e9d5ff',
-        emissive: isSelected ? '#c084fc' : '#2e1065',
-      };
-    }
-  }, [isGold, levelId, specialTheme, isSelected, useSecondarySkin]);
-
-  const emIntensity = isFrozen
-    ? 0.55
-    : isShielded
-    ? 0.5
-    : isSelected
-    ? 0.45
+  // Skin, Eye & Shadow-Clone Palette:
+  // Team Gold ('w') wears our family's true iconic colors;
+  // Team Enemy ('b') is an unmistakable Dark Shadow-Clone ('Schatten-Doppelgänger') in Obsidian & Glowing Amethyst/Crimson!
+  const skinColor = isFrozen
+    ? '#7dd3fc'
     : isGold
-    ? 0.12
-    : 0.25;
+    ? '#f3c39c'
+    : specialTheme === 'halloween'
+    ? '#581c87'
+    : levelId === 3
+    ? '#450a0a'
+    : '#475569';
 
-  // Player ('w') faces North (-Z, rotation.y = Math.PI), Enemy ('b') faces South (+Z, rotation.y = 0)
-  // Wait: in Three.js, +Z points toward the camera (South, Rank 1).
-  // So Enemy ('b', at Rank 7/8) faces +Z (0 rad, directly toward camera/player),
-  // and Player ('w', at Rank 1/2) faces -Z (Math.PI rad, toward the enemy) OR slightly angled so you see their front/3-quarter view!
-  // Let's angle Player ('w') at Math.PI * 0.82 (heroic 3/4 view toward enemy) and Enemy ('b') at 0 (directly facing player)!
-  const facingY = isGold ? Math.PI * 0.82 : 0;
+  const enemyEyeGlow =
+    specialTheme === 'halloween'
+      ? '#f97316'
+      : levelId === 3
+      ? '#ef4444'
+      : '#f43f5e';
+
+  const themeAccentColor =
+    specialTheme === 'ramadan'
+      ? '#fde047'
+      : specialTheme === 'halloween'
+      ? '#f97316'
+      : levelId === 2
+      ? '#38bdf8'
+      : levelId === 3
+      ? '#ef4444'
+      : '#fbbf24';
+
+  // Heroic 3/4 Front Pose toward the camera so players see the faces, beards, sunglasses, grins, hijabs & weapons!
+  const facingY = isGold ? 0.16 : -0.16;
 
   return (
     <group rotation={[0, facingY, 0]}>
-      {/* 1. SCULPTED LATHE BODY / TORSO COLUMN */}
-      <mesh geometry={latheGeom} castShadow receiveShadow>
-        <meshStandardMaterial
-          color={isFrozen ? '#38bdf8' : palette.body}
-          roughness={levelId === 2 ? 0.18 : isGold ? 0.28 : 0.35}
-          metalness={levelId === 2 ? 0.65 : isGold ? 0.32 : 0.58}
-          emissive={isFrozen ? '#0284c7' : palette.emissive}
-          emissiveIntensity={emIntensity}
-        />
-      </mesh>
-
-      {/* Ornate Metallic Waist Belt & Collar Ring */}
-      {role !== 'n' && (
-        <>
-          <mesh position={[0, role === 'p' ? 0.28 : 0.38, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[role === 'p' ? 0.135 : 0.16, 0.025, 10, 24]} />
-            <meshStandardMaterial
-              color={palette.armor}
-              metalness={0.85}
-              roughness={0.2}
-              emissive={palette.trim}
-              emissiveIntensity={0.22}
-            />
-          </mesh>
-          <mesh position={[0, role === 'p' ? 0.53 : 0.68, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[role === 'p' ? 0.15 : 0.2, 0.028, 10, 24]} />
-            <meshStandardMaterial
-              color={palette.armor}
-              metalness={0.88}
-              roughness={0.18}
-              emissive={palette.trim}
-              emissiveIntensity={0.25}
-            />
-          </mesh>
-        </>
-      )}
-
-      {/* Flowing Royal / Shadow Cape on the Back for King, Queen & Bishop */}
-      {(role === 'k' || role === 'q' || role === 'b') && (
-        <mesh
-          position={[0, 0.38, -0.16]}
-          rotation={[0.22, 0, 0]}
-          castShadow
-        >
-          <boxGeometry args={[0.34, 0.56, 0.04]} />
-          <meshStandardMaterial
-            color={palette.cape}
-            roughness={0.55}
-            metalness={0.2}
-          />
-        </mesh>
-      )}
-
-      {/* Enemy Team ('b') Spiked Shadow Pauldrons / Dragon Horns on Shoulders so Enemies look Fierce & Unmistakable! */}
-      {!isGold && role !== 'n' && (
-        <group position={[0, role === 'p' ? 0.52 : 0.68, 0]}>
-          <mesh position={[-0.23, 0.06, 0]} rotation={[0, 0, 0.55]}>
-            <coneGeometry args={[0.06, 0.2, 6]} />
-            <meshStandardMaterial
-              color={palette.trim}
-              emissive={palette.armor}
-              emissiveIntensity={0.75}
-              metalness={0.8}
-            />
-          </mesh>
-          <mesh position={[0.23, 0.06, 0]} rotation={[0, 0, -0.55]}>
-            <coneGeometry args={[0.06, 0.2, 6]} />
-            <meshStandardMaterial
-              color={palette.trim}
-              emissive={palette.armor}
-              emissiveIntensity={0.75}
-              metalness={0.8}
-            />
-          </mesh>
-        </group>
-      )}
-
-      {/* Gold Team ('w') Rounded Paladin Shoulder Pauldrons */}
-      {isGold && role !== 'n' && (
-        <group position={[0, role === 'p' ? 0.5 : 0.66, 0]}>
-          <mesh position={[-0.21, 0, 0]} scale={[1, 0.75, 1]} castShadow>
-            <sphereGeometry args={[0.085, 12, 10]} />
-            <meshStandardMaterial
-              color={palette.armor}
-              metalness={0.85}
-              roughness={0.2}
-            />
-          </mesh>
-          <mesh position={[0.21, 0, 0]} scale={[1, 0.75, 1]} castShadow>
-            <sphereGeometry args={[0.085, 12, 10]} />
-            <meshStandardMaterial
-              color={palette.armor}
-              metalness={0.85}
-              roughness={0.2}
-            />
-          </mesh>
-        </group>
-      )}
-
-      {/* ==================== ROLE-SPECIFIC 3D HEADS, CROWNS & WEAPONS ==================== */}
-
-      {/* 1. KING ('k' – Baba: Armored Head, 8-Pointed Crown, Broadsword & Royal Greatshield) */}
+      {/* ==================== 1. KÖNIG BABA ('k' – Der Familien-König / Papa) ==================== */}
       {role === 'k' && (
         <group>
-          {/* Sculpted Royal Helmet / Head */}
-          <mesh position={[0, 0.89, 0]} castShadow>
-            <sphereGeometry args={[0.145, 18, 16]} />
+          {/* Armored Silver-Steel Boots & Greaves */}
+          {[-0.085, 0.085].map((lx, idx) => (
+            <group key={`k-leg-${idx}`} position={[lx, 0.13, 0]}>
+              <mesh castShadow>
+                <cylinderGeometry args={[0.055, 0.062, 0.24, 12]} />
+                <meshStandardMaterial
+                  color={isGold ? '#94a3b8' : '#1e1b4b'}
+                  metalness={0.82}
+                  roughness={0.22}
+                />
+              </mesh>
+              {/* Golden Knee Guard */}
+              <mesh position={[0, 0.04, 0.055]}>
+                <sphereGeometry args={[0.032, 8, 8]} />
+                <meshStandardMaterial color={isGold ? '#fbbf24' : '#9333ea'} metalness={0.9} />
+              </mesh>
+            </group>
+          ))}
+
+          {/* Red Royal Inner Tunic Skirt */}
+          <mesh position={[0, 0.26, 0]} castShadow>
+            <cylinderGeometry args={[0.145, 0.185, 0.2, 16]} />
             <meshStandardMaterial
-              color={palette.skin}
-              roughness={0.35}
-              metalness={0.25}
+              color={isGold ? (specialTheme === 'ramadan' ? '#065f46' : '#dc2626') : '#3b0764'}
+              roughness={0.55}
             />
           </mesh>
-          {/* Glowing Eyes on Visor */}
-          <mesh position={[-0.048, 0.9, 0.13]}>
-            <sphereGeometry args={[0.022, 8, 8]} />
-            <meshBasicMaterial color={palette.eyeGlow} />
-          </mesh>
-          <mesh position={[0.048, 0.9, 0.13]}>
-            <sphereGeometry args={[0.022, 8, 8]} />
-            <meshBasicMaterial color={palette.eyeGlow} />
-          </mesh>
-          {/* Royal Beard / Chin Guard */}
-          <mesh position={[0, 0.81, 0.11]}>
-            <boxGeometry args={[0.14, 0.1, 0.08]} />
-            <meshStandardMaterial color={palette.armor} metalness={0.75} roughness={0.25} />
-          </mesh>
-          {/* Ornate 3D Royal Crown */}
-          <mesh position={[0, 1.02, 0]} castShadow>
-            <cylinderGeometry args={[0.155, 0.13, 0.11, 8]} />
+
+          {/* Silver-Steel Paladin Chestplate + Golden Eagle Crest */}
+          <mesh position={[0, 0.43, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.175, 0.145, 0.28, 16]} />
             <meshStandardMaterial
-              color={palette.armor}
-              emissive={palette.trim}
-              emissiveIntensity={0.4}
+              color={isFrozen ? '#38bdf8' : isGold ? '#cbd5e1' : '#1e1b4b'}
+              metalness={0.85}
+              roughness={0.2}
+            />
+          </mesh>
+          {/* Golden Eagle Wing Emblem on Chest */}
+          <mesh position={[0, 0.45, 0.16]} scale={[1.4, 0.8, 0.3]}>
+            <octahedronGeometry args={[0.075, 0]} />
+            <meshStandardMaterial
+              color={isGold ? '#fbbf24' : '#e879f9'}
+              emissive={isGold ? '#d97706' : '#9333ea'}
+              emissiveIntensity={0.45}
               metalness={0.9}
-              roughness={0.15}
             />
           </mesh>
-          {/* Crown Finial: Crescent & Star in Ramadan, Pumpkin Gem in Halloween, Royal Cross/Star in Dungeon */}
-          {specialTheme === 'ramadan' ? (
-            <group position={[0, 1.15, 0]}>
-              <mesh>
-                <torusGeometry args={[0.075, 0.02, 8, 20, Math.PI * 1.45]} />
-                <meshBasicMaterial color="#fde047" />
+
+          {/* Leather Belt & Golden Buckle */}
+          <mesh position={[0, 0.31, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.15, 0.025, 8, 20]} />
+            <meshStandardMaterial color="#78350f" roughness={0.6} />
+          </mesh>
+          <mesh position={[0, 0.31, 0.165]}>
+            <boxGeometry args={[0.06, 0.05, 0.02]} />
+            <meshStandardMaterial color="#fbbf24" metalness={0.9} />
+          </mesh>
+
+          {/* Billowing Royal Crimson Cape */}
+          <mesh position={[0, 0.36, -0.15]} rotation={[0.2, 0, 0]} castShadow>
+            <boxGeometry args={[0.38, 0.54, 0.04]} />
+            <meshStandardMaterial
+              color={isGold ? (specialTheme === 'ramadan' ? '#047857' : '#b91c1c') : '#3b0764'}
+              roughness={0.55}
+            />
+          </mesh>
+
+          {/* Layered Silver & Gold Rounded Shoulder Pauldrons */}
+          {[-0.21, 0.21].map((sx, idx) => (
+            <group key={`k-pauldron-${idx}`} position={[sx, 0.52, 0]}>
+              <mesh scale={[1.1, 0.85, 1.1]} castShadow>
+                <sphereGeometry args={[0.088, 14, 12]} />
+                <meshStandardMaterial
+                  color={isGold ? '#cbd5e1' : '#312e81'}
+                  metalness={0.85}
+                  roughness={0.2}
+                />
               </mesh>
-              <mesh position={[0, 0.02, 0]} scale={[0.05, 0.05, 0.05]}>
-                <octahedronGeometry args={[1, 0]} />
-                <meshBasicMaterial color="#34d399" />
+              <mesh position={[0, -0.02, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.082, 0.016, 8, 16]} />
+                <meshStandardMaterial color={isGold ? '#fbbf24' : '#c084fc'} metalness={0.9} />
               </mesh>
             </group>
-          ) : (
-            <group position={[0, 1.15, 0]}>
-              <mesh>
-                <boxGeometry args={[0.045, 0.16, 0.045]} />
-                <meshBasicMaterial color={palette.trim} />
-              </mesh>
-              <mesh>
-                <boxGeometry args={[0.13, 0.045, 0.045]} />
-                <meshBasicMaterial color={palette.trim} />
-              </mesh>
-            </group>
-          )}
-          {/* Right Hand: 3D Excalibur Broadsword */}
-          <group position={[0.28, 0.56, 0.12]} rotation={[0.25, 0, -0.15]}>
-            {/* Blade */}
-            <mesh position={[0, 0.24, 0]} castShadow>
-              <boxGeometry args={[0.045, 0.52, 0.018]} />
+          ))}
+
+          {/* Chibi Head + Dark Hair + Full Dark Beard & Mustache */}
+          <ChibiHead3D
+            headY={0.73}
+            headRadius={0.16}
+            skinColor={skinColor}
+            eyeColor={isGold ? '#1e3a8a' : enemyEyeGlow}
+            browColor="#1c1917"
+            isGold={isGold}
+          />
+          {/* Short Dark Hair Cap */}
+          <mesh position={[0, 0.77, -0.02]} scale={[1.04, 0.92, 1.02]}>
+            <sphereGeometry args={[0.16, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.62]} />
+            <meshStandardMaterial color="#1c1917" roughness={0.75} />
+          </mesh>
+          {/* Full Sculpted 3D Dark Beard & Mustache framing Baba's Jaw & Chin */}
+          <mesh position={[0, 0.66, 0.055]} scale={[0.96, 0.72, 0.88]} castShadow>
+            <sphereGeometry args={[0.152, 16, 12]} />
+            <meshStandardMaterial color="#1c1917" roughness={0.8} />
+          </mesh>
+          {/* Mustache Bar */}
+          <mesh position={[0, 0.7, 0.145]} rotation={[0, 0, 0]}>
+            <boxGeometry args={[0.11, 0.026, 0.032]} />
+            <meshStandardMaterial color="#1c1917" roughness={0.8} />
+          </mesh>
+
+          {/* Golden 5-Pointed Royal Crown with Ruby & Sapphire Jewels */}
+          <group position={[0, 0.89, 0]}>
+            <mesh castShadow>
+              <cylinderGeometry args={[0.135, 0.12, 0.09, 10]} />
               <meshStandardMaterial
-                color={palette.weapon}
-                emissive={palette.trim}
-                emissiveIntensity={0.5}
+                color="#fbbf24"
+                emissive={themeAccentColor}
+                emissiveIntensity={0.35}
                 metalness={0.92}
+                roughness={0.12}
+              />
+            </mesh>
+            {/* 5 Crown Peaks */}
+            {[0, 1, 2, 3, 4].map((cIdx) => {
+              const a = (cIdx * Math.PI * 2) / 5;
+              return (
+                <mesh
+                  key={`crown-peak-${cIdx}`}
+                  position={[Math.sin(a) * 0.12, 0.065, Math.cos(a) * 0.12]}
+                >
+                  <coneGeometry args={[0.032, 0.07, 4]} />
+                  <meshStandardMaterial color="#fde047" metalness={0.95} roughness={0.1} />
+                </mesh>
+              );
+            })}
+            {/* Front Ruby Gem */}
+            <mesh position={[0, 0, 0.128]}>
+              <sphereGeometry args={[0.022, 8, 8]} />
+              <meshBasicMaterial color={specialTheme === 'ramadan' ? '#10b981' : '#ef4444'} />
+            </mesh>
+          </group>
+
+          {/* Armored Arms + Glowing Runic Broadsword held heroically across the front */}
+          <mesh position={[-0.22, 0.39, 0.04]} rotation={[0.3, 0, 0.2]}>
+            <cylinderGeometry args={[0.042, 0.048, 0.22, 10]} />
+            <meshStandardMaterial color={isGold ? '#94a3b8' : '#1e1b4b'} metalness={0.8} />
+          </mesh>
+          <mesh position={[0.22, 0.39, 0.06]} rotation={[0.45, 0, -0.25]}>
+            <cylinderGeometry args={[0.042, 0.048, 0.22, 10]} />
+            <meshStandardMaterial color={isGold ? '#94a3b8' : '#1e1b4b'} metalness={0.8} />
+          </mesh>
+
+          {/* König Baba's Runic Broadsword ('Sonnenklinge') */}
+          <group position={[0.14, 0.32, 0.17]} rotation={[0.12, 0.15, -1.05]}>
+            {/* Golden Crossguard */}
+            <mesh>
+              <boxGeometry args={[0.17, 0.035, 0.045]} />
+              <meshStandardMaterial color="#fbbf24" metalness={0.92} roughness={0.15} />
+            </mesh>
+            {/* Silver Broadsword Blade */}
+            <mesh position={[0, 0.26, 0]} castShadow>
+              <boxGeometry args={[0.058, 0.48, 0.018]} />
+              <meshStandardMaterial
+                color={isGold ? '#f1f5f9' : '#c084fc'}
+                metalness={0.95}
                 roughness={0.1}
               />
             </mesh>
-            {/* Crossguard */}
-            <mesh position={[0, 0, 0]}>
-              <boxGeometry args={[0.16, 0.035, 0.04]} />
-              <meshStandardMaterial color={palette.armor} metalness={0.9} />
-            </mesh>
-          </group>
-          {/* Left Hand: 3D Royal Paladin Shield */}
-          <group position={[-0.26, 0.5, 0.14]} rotation={[0, 0.35, 0]}>
-            <mesh castShadow>
-              <boxGeometry args={[0.22, 0.32, 0.04]} />
-              <meshStandardMaterial
-                color={palette.armor}
-                metalness={0.82}
-                roughness={0.22}
-              />
-            </mesh>
-            <mesh position={[0, 0, 0.025]} scale={[0.07, 0.1, 0.03]}>
-              <octahedronGeometry args={[1, 0]} />
-              <meshBasicMaterial color={palette.eyeGlow} />
+            {/* Glowing Golden Rune Groove down the Blade */}
+            <mesh position={[0, 0.24, 0.011]}>
+              <boxGeometry args={[0.018, 0.38, 0.006]} />
+              <meshBasicMaterial color={isGold ? '#fde047' : '#f43f5e'} />
             </mesh>
           </group>
         </group>
       )}
 
-      {/* 2. QUEEN ('q' – Anne: Crowned Head, 6-Pointed Crystal Tiara & Archmage Orb Staff) */}
+      {/* ==================== 2. KÖNIGIN ANNE ('q' – Die Königin / Mama) ==================== */}
       {role === 'q' && (
         <group>
-          <mesh position={[0, 0.86, 0]} castShadow>
-            <sphereGeometry args={[0.135, 18, 16]} />
+          {/* Flowing Royal Purple & Gold-Embroidered Archmage Gown */}
+          <mesh position={[0, 0.28, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.12, 0.24, 0.52, 20]} />
             <meshStandardMaterial
-              color={palette.skin}
-              roughness={0.3}
-              metalness={0.2}
+              color={
+                isFrozen
+                  ? '#38bdf8'
+                  : isGold
+                  ? specialTheme === 'ramadan'
+                    ? '#065f46'
+                    : '#7e22ce'
+                  : '#1e1b4b'
+              }
+              roughness={0.38}
+              metalness={0.18}
             />
           </mesh>
-          {/* Glowing Eyes */}
-          <mesh position={[-0.044, 0.87, 0.12]}>
-            <sphereGeometry args={[0.02, 8, 8]} />
-            <meshBasicMaterial color={palette.eyeGlow} />
+          {/* Gold-Embroidered Vertical Front Panels on Gown */}
+          {[-0.045, 0.045].map((gx, idx) => (
+            <mesh key={`q-gold-trim-${idx}`} position={[gx, 0.27, 0.165]} rotation={[-0.18, 0, 0]}>
+              <boxGeometry args={[0.022, 0.48, 0.015]} />
+              <meshStandardMaterial color="#fbbf24" metalness={0.88} roughness={0.2} />
+            </mesh>
+          ))}
+          {/* Golden Waist Belt + Magenta Gem + Spell Pouch */}
+          <mesh position={[0, 0.36, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.135, 0.022, 8, 20]} />
+            <meshStandardMaterial color="#fbbf24" metalness={0.9} roughness={0.15} />
           </mesh>
-          <mesh position={[0.044, 0.87, 0.12]}>
-            <sphereGeometry args={[0.02, 8, 8]} />
-            <meshBasicMaterial color={palette.eyeGlow} />
-          </mesh>
-          {/* 6-Pointed Flared Queen Coronet + Floating Central Gem */}
-          <mesh position={[0, 0.98, 0]} castShadow>
-            <cylinderGeometry args={[0.15, 0.11, 0.1, 6]} />
-            <meshStandardMaterial
-              color={palette.armor}
-              emissive={palette.trim}
-              emissiveIntensity={0.45}
-              metalness={0.9}
-              roughness={0.12}
-            />
-          </mesh>
-          <mesh position={[0, 1.08, 0]} scale={[0.065, 0.095, 0.065]}>
+          <mesh position={[0, 0.36, 0.145]} scale={[0.03, 0.045, 0.02]}>
             <octahedronGeometry args={[1, 0]} />
-            <meshBasicMaterial color={palette.eyeGlow} />
+            <meshBasicMaterial color="#e879f9" />
           </mesh>
-          {/* Right Hand: Tall 3D Archmage Staff topped with Glowing Mana Sphere */}
-          <group position={[0.25, 0.52, 0.1]}>
-            <mesh castShadow>
-              <cylinderGeometry args={[0.018, 0.022, 0.86, 8]} />
-              <meshStandardMaterial color={palette.armor} metalness={0.85} />
-            </mesh>
-            <mesh position={[0, 0.46, 0]}>
-              <octahedronGeometry args={[0.085, 1]} />
-              <meshBasicMaterial color={palette.eyeGlow} wireframe />
-            </mesh>
-            <mesh position={[0, 0.46, 0]}>
-              <sphereGeometry args={[0.05, 12, 12]} />
-              <meshBasicMaterial color="#ffffff" />
-            </mesh>
-          </group>
-        </group>
-      )}
 
-      {/* 3. ROOK ('r' – Onkel: Crenellated Castle Battlement Crown, Glowing Furnace Visor & Warhammer) */}
-      {role === 'r' && (
-        <group>
-          {/* Crenellated 3D Castle Turret Crown (6 Stone/Gold Merlons) */}
-          {[0, 1, 2, 3, 4, 5].map((mIdx) => {
-            const a = (mIdx * Math.PI) / 3;
-            return (
+          {/* Chibi Head + Expressive Smile */}
+          <ChibiHead3D
+            headY={0.71}
+            headRadius={0.152}
+            skinColor={skinColor}
+            eyeColor={isGold ? '#451a03' : enemyEyeGlow}
+            browColor="#27272a"
+            isGold={isGold}
+            hasRedLips
+          />
+
+          {/* Sculpted 3D Royal Purple Hijab (Kopftuch) wrapping Head & Shoulders */}
+          <mesh position={[0, 0.73, -0.02]} scale={[1.08, 1.06, 1.08]} castShadow>
+            <sphereGeometry args={[0.158, 20, 16]} />
+            <meshStandardMaterial
+              color={isGold ? (specialTheme === 'ramadan' ? '#047857' : '#6b21a8') : '#312e81'}
+              roughness={0.42}
+            />
+          </mesh>
+          {/* Hijab Neck & Shoulder Drape */}
+          <mesh position={[0, 0.56, 0]} castShadow>
+            <cylinderGeometry args={[0.145, 0.19, 0.14, 18]} />
+            <meshStandardMaterial
+              color={isGold ? (specialTheme === 'ramadan' ? '#047857' : '#6b21a8') : '#312e81'}
+              roughness={0.42}
+            />
+          </mesh>
+          {/* Golden V-Shaped Forehead Diadem / Tiara with Magenta Jewel */}
+          <mesh position={[0, 0.81, 0.135]} rotation={[0.2, 0, 0]}>
+            <torusGeometry args={[0.095, 0.016, 8, 16, Math.PI]} />
+            <meshStandardMaterial color="#fbbf24" metalness={0.95} roughness={0.1} />
+          </mesh>
+          <mesh position={[0, 0.81, 0.155]} scale={[0.028, 0.038, 0.02]}>
+            <octahedronGeometry args={[1, 0]} />
+            <meshBasicMaterial color="#f472b6" />
+          </mesh>
+
+          {/* Outstretched Flared Sleeves + Twin Floating Violet Magic Orbs! */}
+          {[-1, 1].map((side) => (
+            <group key={`q-arm-${side}`}>
+              {/* Flared Purple & Gold Sleeve */}
               <mesh
-                key={`merlon-${mIdx}`}
-                position={[Math.cos(a) * 0.19, 0.81, Math.sin(a) * 0.19]}
-                rotation={[0, -a, 0]}
+                position={[side * 0.21, 0.46, 0.05]}
+                rotation={[0.3, 0, side * -0.55]}
                 castShadow
               >
-                <boxGeometry args={[0.085, 0.14, 0.085]} />
+                <coneGeometry args={[0.068, 0.22, 12]} />
                 <meshStandardMaterial
-                  color={palette.armor}
-                  metalness={0.75}
-                  roughness={0.28}
+                  color={isGold ? '#7e22ce' : '#1e1b4b'}
+                  roughness={0.4}
                 />
               </mesh>
-            );
-          })}
-          {/* Glowing Guardian Visor Slit on the Front of the Tower */}
-          <mesh position={[0, 0.62, 0.23]}>
-            <boxGeometry args={[0.18, 0.045, 0.04]} />
-            <meshBasicMaterial color={palette.eyeGlow} />
-          </mesh>
-          {/* Heavy 3D Siege Warhammer on the Side */}
-          <group position={[0.27, 0.48, 0.08]} rotation={[0.2, 0, -0.1]}>
-            <mesh>
-              <cylinderGeometry args={[0.022, 0.022, 0.56, 8]} />
-              <meshStandardMaterial color={palette.armor} metalness={0.8} />
-            </mesh>
-            <mesh position={[0, 0.26, 0]}>
-              <boxGeometry args={[0.14, 0.1, 0.22]} />
-              <meshStandardMaterial
-                color={palette.weapon}
-                emissive={palette.trim}
-                emissiveIntensity={0.4}
-                metalness={0.9}
-              />
-            </mesh>
-          </group>
-        </group>
-      )}
-
-      {/* 4. BISHOP ('b' – Coole Tante: Sculpted Mitre Hat, Cool 3D Sunglasses Visor & Sapphire Scepter) */}
-      {role === 'b' && (
-        <group>
-          {/* Head */}
-          <mesh position={[0, 0.78, 0]} castShadow>
-            <sphereGeometry args={[0.125, 16, 14]} />
-            <meshStandardMaterial color={palette.skin} roughness={0.35} />
-          </mesh>
-          {/* Signature Cool Aunt 3D Sunglasses Visor! */}
-          <mesh position={[0, 0.79, 0.115]}>
-            <boxGeometry args={[0.17, 0.048, 0.04]} />
-            <meshStandardMaterial
-              color="#0f172a"
-              emissive={palette.eyeGlow}
-              emissiveIntensity={0.65}
-              metalness={0.95}
-              roughness={0.05}
-            />
-          </mesh>
-          {/* Sculpted Tapered Bishop Mitre / Mystic Hat */}
-          <mesh position={[0, 0.94, 0]} scale={[1, 1.35, 0.85]} castShadow>
-            <coneGeometry args={[0.135, 0.22, 12]} />
-            <meshStandardMaterial
-              color={palette.armor}
-              emissive={palette.trim}
-              emissiveIntensity={0.3}
-              metalness={0.78}
-              roughness={0.22}
-            />
-          </mesh>
-          <mesh position={[0, 1.09, 0]}>
-            <sphereGeometry args={[0.038, 10, 10]} />
-            <meshBasicMaterial color={palette.eyeGlow} />
-          </mesh>
-          {/* Crystal Scepter */}
-          <group position={[0.22, 0.48, 0.1]} rotation={[0.18, 0, -0.1]}>
-            <mesh>
-              <cylinderGeometry args={[0.016, 0.018, 0.68, 8]} />
-              <meshStandardMaterial color={palette.armor} metalness={0.85} />
-            </mesh>
-            <mesh position={[0, 0.36, 0]} scale={[0.06, 0.12, 0.06]}>
-              <octahedronGeometry args={[1, 0]} />
-              <meshBasicMaterial color={palette.eyeGlow} />
-            </mesh>
-          </group>
-        </group>
-      )}
-
-      {/* 5. KNIGHT ('n' – Tochter: True 3D Sculpted Armored Warhorse / Unicorn with Golden Horn & Mane!) */}
-      {role === 'n' && (
-        <group>
-          {/* Muscular Arched Warhorse Neck */}
-          <mesh
-            position={[0, 0.56, 0.04]}
-            rotation={[-0.38, 0, 0]}
-            castShadow
-            receiveShadow
-          >
-            <cylinderGeometry args={[0.11, 0.165, 0.38, 14]} />
-            <meshStandardMaterial
-              color={isFrozen ? '#38bdf8' : palette.body}
-              roughness={0.28}
-              metalness={isGold ? 0.35 : 0.6}
-              emissive={palette.emissive}
-              emissiveIntensity={emIntensity}
-            />
-          </mesh>
-          {/* Sculpted Horse Head & Snout */}
-          <mesh
-            position={[0, 0.74, 0.14]}
-            rotation={[1.15, 0, 0]}
-            castShadow
-          >
-            <cylinderGeometry args={[0.068, 0.115, 0.28, 12]} />
-            <meshStandardMaterial
-              color={isFrozen ? '#38bdf8' : palette.body}
-              roughness={0.28}
-              metalness={isGold ? 0.35 : 0.6}
-            />
-          </mesh>
-          {/* Armored Golden/Amethyst Chamfron (Forehead Plate) */}
-          <mesh
-            position={[0, 0.78, 0.16]}
-            rotation={[1.15, 0, 0]}
-          >
-            <boxGeometry args={[0.1, 0.22, 0.04]} />
-            <meshStandardMaterial
-              color={palette.armor}
-              metalness={0.88}
-              roughness={0.18}
-            />
-          </mesh>
-          {/* Glowing Warhorse Eyes */}
-          <mesh position={[-0.085, 0.76, 0.11]}>
-            <sphereGeometry args={[0.022, 8, 8]} />
-            <meshBasicMaterial color={palette.eyeGlow} />
-          </mesh>
-          <mesh position={[0.085, 0.76, 0.11]}>
-            <sphereGeometry args={[0.022, 8, 8]} />
-            <meshBasicMaterial color={palette.eyeGlow} />
-          </mesh>
-          {/* Twin Pointed Horse Ears */}
-          <mesh position={[-0.065, 0.87, 0.04]} rotation={[-0.2, 0, 0.2]}>
-            <coneGeometry args={[0.028, 0.09, 6]} />
-            <meshStandardMaterial color={palette.armor} metalness={0.8} />
-          </mesh>
-          <mesh position={[0.065, 0.87, 0.04]} rotation={[-0.2, 0, -0.2]}>
-            <coneGeometry args={[0.028, 0.09, 6]} />
-            <meshStandardMaterial color={palette.armor} metalness={0.8} />
-          </mesh>
-          {/* Radiant Spiraling Unicorn Horn on Forehead! */}
-          <mesh position={[0, 0.92, 0.22]} rotation={[0.68, 0, 0]}>
-            <coneGeometry args={[0.032, 0.24, 8]} />
-            <meshBasicMaterial color={palette.trim} />
-          </mesh>
-          {/* Sculpted Flowing Mane Crest Plates along the Back of the Neck */}
-          {[0, 1, 2, 3].map((mIdx) => (
-            <mesh
-              key={`mane-${mIdx}`}
-              position={[0, 0.46 + mIdx * 0.1, -0.08 + mIdx * 0.025]}
-              rotation={[-0.4, 0, 0]}
-            >
-              <boxGeometry args={[0.045, 0.11, 0.12]} />
-              <meshStandardMaterial
-                color={palette.armor}
-                emissive={palette.trim}
-                emissiveIntensity={0.35}
-                metalness={0.85}
-              />
-            </mesh>
+              {/* Floating Glowing Violet/Magenta Arcane Orb above each Hand */}
+              <group position={[side * 0.31, 0.56, 0.12]}>
+                <mesh>
+                  <sphereGeometry args={[0.065, 14, 14]} />
+                  <meshBasicMaterial
+                    color={isGold ? '#e879f9' : '#f43f5e'}
+                    transparent
+                    opacity={0.45}
+                  />
+                </mesh>
+                <mesh>
+                  <sphereGeometry args={[0.038, 12, 12]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+                <mesh rotation={[Math.PI / 3, side * 0.4, 0]}>
+                  <torusGeometry args={[0.082, 0.008, 8, 20]} />
+                  <meshBasicMaterial color={isGold ? '#f0abfc' : '#fb7185'} />
+                </mesh>
+              </group>
+            </group>
           ))}
         </group>
       )}
 
-      {/* 6. PAWN ('p' – Cousinen: Armored Ranger Helmet/Pumpkin/Turban, Round Buckler Shield & Spear) */}
-      {role === 'p' && (
+      {/* ==================== 3. TANTE BOSS ('b' – Die Tante mit cooler Sonnenbrille / Läufer) ==================== */}
+      {role === 'b' && (
         <group>
-          {/* Head (or Glowing Jack-o'-Lantern Head in Halloween!) */}
-          <mesh position={[0, 0.66, 0]} castShadow>
-            <sphereGeometry args={[0.12, 16, 14]} />
+          {/* Sleek Black & Gold-Trimmed Long Coat/Robe */}
+          <mesh position={[0, 0.28, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.125, 0.23, 0.52, 18]} />
             <meshStandardMaterial
-              color={
-                specialTheme === 'halloween'
-                  ? '#f97316'
-                  : palette.skin
-              }
+              color={isFrozen ? '#38bdf8' : isGold ? '#18181b' : '#2e1065'}
               roughness={0.35}
+              metalness={0.25}
             />
           </mesh>
-          {/* Glowing Eyes */}
-          <mesh position={[-0.04, 0.67, 0.108]}>
-            <sphereGeometry args={[0.018, 8, 8]} />
-            <meshBasicMaterial color={palette.eyeGlow} />
-          </mesh>
-          <mesh position={[0.04, 0.67, 0.108]}>
-            <sphereGeometry args={[0.018, 8, 8]} />
-            <meshBasicMaterial color={palette.eyeGlow} />
-          </mesh>
-          {/* Helmet / Crest on Top */}
-          <mesh position={[0, 0.74, 0]} castShadow>
-            <cylinderGeometry
-              args={[
-                useSecondarySkin ? 0.09 : 0.125,
-                0.125,
-                0.08,
-                8,
-              ]}
-            />
-            <meshStandardMaterial
-              color={palette.armor}
-              metalness={0.85}
-              roughness={0.2}
-            />
-          </mesh>
-          <mesh position={[0, 0.81, 0]}>
-            <coneGeometry args={[0.05, 0.1, 6]} />
-            <meshBasicMaterial color={palette.trim} />
-          </mesh>
-          {/* Left Hand: Round 3D Buckler Shield */}
-          <mesh
-            position={[-0.19, 0.4, 0.12]}
-            rotation={[Math.PI / 2, 0, -0.35]}
-            castShadow
-          >
-            <cylinderGeometry args={[0.13, 0.13, 0.035, 16]} />
-            <meshStandardMaterial
-              color={palette.armor}
-              emissive={palette.trim}
-              emissiveIntensity={0.25}
-              metalness={0.85}
-              roughness={0.2}
-            />
-          </mesh>
-          {/* Right Hand: 3D Ranger Spear / Halberd */}
-          <group position={[0.2, 0.44, 0.1]} rotation={[0.2, 0, -0.08]}>
-            <mesh>
-              <cylinderGeometry args={[0.015, 0.015, 0.56, 8]} />
-              <meshStandardMaterial color={palette.armor} metalness={0.8} />
+          {/* Golden V-Lapel & Front Coat Trim */}
+          {[-0.04, 0.04].map((tx, idx) => (
+            <mesh key={`b-trim-${idx}`} position={[tx, 0.28, 0.16]} rotation={[-0.16, 0, 0]}>
+              <boxGeometry args={[0.02, 0.48, 0.015]} />
+              <meshStandardMaterial color="#fbbf24" metalness={0.9} roughness={0.18} />
             </mesh>
-            <mesh position={[0, 0.31, 0]} scale={[0.045, 0.11, 0.025]}>
-              <octahedronGeometry args={[1, 0]} />
-              <meshBasicMaterial color={palette.weapon} />
+          ))}
+          {/* Belt + Glowing Blue Sapphire Diamond Clasp at Waist & Collar */}
+          <mesh position={[0, 0.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.138, 0.02, 8, 20]} />
+            <meshStandardMaterial color="#78350f" roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 0.35, 0.15]} scale={[0.032, 0.042, 0.02]}>
+            <octahedronGeometry args={[1, 0]} />
+            <meshBasicMaterial color="#38bdf8" />
+          </mesh>
+          <mesh position={[0, 0.52, 0.14]} scale={[0.028, 0.035, 0.02]}>
+            <octahedronGeometry args={[1, 0]} />
+            <meshBasicMaterial color="#38bdf8" />
+          </mesh>
+
+          {/* Chibi Head + Confident Red-Lip Smile */}
+          <ChibiHead3D
+            headY={0.7}
+            headRadius={0.15}
+            skinColor={skinColor}
+            eyeColor={isGold ? '#0284c7' : enemyEyeGlow}
+            browColor="#ca8a04"
+            isGold={isGold}
+            hasRedLips
+          />
+
+          {/* Voluminous Wavy Golden-Blonde 3D Hair cascading down Sides & Back! */}
+          <group position={[0, 0.72, 0]}>
+            {/* Top Blonde Hair Volume */}
+            <mesh position={[0, 0.04, -0.02]} scale={[1.12, 0.98, 1.08]} castShadow>
+              <sphereGeometry args={[0.158, 18, 14]} />
+              <meshStandardMaterial
+                color={isGold ? '#eab308' : '#7e22ce'}
+                roughness={0.45}
+                metalness={0.15}
+              />
+            </mesh>
+            {/* Left & Right Wavy Blonde Curls framing her Face */}
+            {[-1, 1].map((side) => (
+              <group key={`b-curls-${side}`} position={[side * 0.145, -0.05, 0.02]}>
+                <mesh position={[0, 0.04, 0]}>
+                  <sphereGeometry args={[0.068, 12, 10]} />
+                  <meshStandardMaterial color={isGold ? '#facc15' : '#9333ea'} roughness={0.45} />
+                </mesh>
+                <mesh position={[side * 0.015, -0.05, 0]}>
+                  <sphereGeometry args={[0.062, 12, 10]} />
+                  <meshStandardMaterial color={isGold ? '#eab308' : '#7e22ce'} roughness={0.45} />
+                </mesh>
+                <mesh position={[0, -0.13, -0.02]}>
+                  <sphereGeometry args={[0.055, 10, 10]} />
+                  <meshStandardMaterial color={isGold ? '#ca8a04' : '#6b21a8'} roughness={0.45} />
+                </mesh>
+              </group>
+            ))}
+          </group>
+
+          {/* SIGNATURE COOL BLACK WAYFARER SUNGLASSES ('Coole Sonnenbrille')! */}
+          <group position={[0, 0.72, 0.142]}>
+            {/* Left & Right Dark Glossy Wayfarer Lenses */}
+            {[-0.058, 0.058].map((gx, idx) => (
+              <group key={`sunglass-lens-${idx}`} position={[gx, 0, 0]}>
+                <mesh>
+                  <boxGeometry args={[0.088, 0.058, 0.022]} />
+                  <meshStandardMaterial
+                    color="#09090b"
+                    metalness={0.95}
+                    roughness={0.05}
+                  />
+                </mesh>
+                {/* Cool Diagonal White Lens Glare Reflection */}
+                <mesh position={[-0.012, 0.008, 0.013]} rotation={[0, 0, -0.45]}>
+                  <boxGeometry args={[0.014, 0.038, 0.004]} />
+                  <meshBasicMaterial color={isGold ? '#bae6fd' : '#f43f5e'} />
+                </mesh>
+              </group>
+            ))}
+            {/* Nose Bridge Bar */}
+            <mesh position={[0, 0.012, 0]}>
+              <boxGeometry args={[0.04, 0.012, 0.02]} />
+              <meshStandardMaterial color="#fbbf24" metalness={0.9} />
             </mesh>
           </group>
+
+          {/* Right Hand: Tall Golden Staff topped with a Giant Glowing Blue Sapphire Crystal! */}
+          <group position={[0.25, 0.48, 0.08]}>
+            <mesh castShadow>
+              <cylinderGeometry args={[0.018, 0.022, 0.86, 10]} />
+              <meshStandardMaterial color="#d97706" metalness={0.85} roughness={0.2} />
+            </mesh>
+            {/* Golden Crystal Cradle Prongs */}
+            <mesh position={[0, 0.36, 0]} rotation={[0, 0, Math.PI]}>
+              <coneGeometry args={[0.065, 0.1, 4]} />
+              <meshStandardMaterial color="#fbbf24" metalness={0.92} />
+            </mesh>
+            {/* Giant Faceted Glowing Blue Sapphire Crystal */}
+            <mesh position={[0, 0.48, 0]} scale={[0.085, 0.16, 0.085]}>
+              <octahedronGeometry args={[1, 0]} />
+              <meshStandardMaterial
+                color={isGold ? '#38bdf8' : '#f43f5e'}
+                emissive={isGold ? '#0284c7' : '#e11d48'}
+                emissiveIntensity={0.85}
+                roughness={0.1}
+                metalness={0.3}
+              />
+            </mesh>
+          </group>
+        </group>
+      )}
+
+      {/* ==================== 4. PRINZESSIN MINI ('n' – Unsere Tochter mit 2 Zöpfen / Springer) ==================== */}
+      {role === 'n' && (
+        <group>
+          {/* Shining Silver-Steel Armored Boots */}
+          {[-0.07, 0.07].map((lx, idx) => (
+            <mesh key={`n-leg-${idx}`} position={[lx, 0.12, 0]} castShadow>
+              <cylinderGeometry args={[0.046, 0.052, 0.22, 12]} />
+              <meshStandardMaterial
+                color={isGold ? '#cbd5e1' : '#312e81'}
+                metalness={0.85}
+                roughness={0.2}
+              />
+            </mesh>
+          ))}
+
+          {/* Plated Silver Knight Skirt & Breastplate */}
+          <mesh position={[0, 0.34, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.135, 0.175, 0.32, 16]} />
+            <meshStandardMaterial
+              color={isFrozen ? '#38bdf8' : isGold ? '#e2e8f0' : '#1e1b4b'}
+              metalness={0.85}
+              roughness={0.18}
+            />
+          </mesh>
+
+          {/* Fluttering Bright Red Adventurer Cape */}
+          <mesh position={[0, 0.32, -0.14]} rotation={[0.25, 0, 0]} castShadow>
+            <boxGeometry args={[0.32, 0.44, 0.035]} />
+            <meshStandardMaterial
+              color={isGold ? '#ef4444' : '#4c1d95'}
+              roughness={0.5}
+            />
+          </mesh>
+
+          {/* Rounded Silver Knight Shoulder Pauldrons */}
+          {[-0.17, 0.17].map((sx, idx) => (
+            <mesh key={`n-pauldron-${idx}`} position={[sx, 0.45, 0]} castShadow>
+              <sphereGeometry args={[0.068, 12, 10]} />
+              <meshStandardMaterial color={isGold ? '#e2e8f0' : '#4c1d95'} metalness={0.85} />
+            </mesh>
+          ))}
+
+          {/* Cute Cheerful Child Chibi Head with Rosy Cheeks & Big Sparkling Brown Eyes */}
+          <ChibiHead3D
+            headY={0.66}
+            headRadius={0.158}
+            skinColor={skinColor}
+            eyeColor={isGold ? '#451a03' : enemyEyeGlow}
+            browColor="#5c3a21"
+            isGold={isGold}
+            hasRosyCheeks
+          />
+
+          {/* Warm Brown Hair + TWO BOUNCY 3D PIGTAILS ('Zwei süße Zöpfe') with Red Hair Ties! */}
+          <group position={[0, 0.68, 0]}>
+            {/* Top Brown Hair & Side Bangs */}
+            <mesh position={[0, 0.03, -0.015]} scale={[1.05, 0.95, 1.04]} castShadow>
+              <sphereGeometry args={[0.16, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.6]} />
+              <meshStandardMaterial color="#5c3a21" roughness={0.65} />
+            </mesh>
+            {/* Left & Right Pigtails with Red Hair-Tie Rings */}
+            {[-1, 1].map((side) => (
+              <group key={`pigtail-${side}`} position={[side * 0.17, 0.04, -0.01]}>
+                {/* Bright Red Hair Tie */}
+                <mesh rotation={[0, Math.PI / 2, 0]}>
+                  <torusGeometry args={[0.032, 0.014, 8, 14]} />
+                  <meshBasicMaterial color="#ef4444" />
+                </mesh>
+                {/* Bouncy Curved Brown Pigtail */}
+                <mesh
+                  position={[side * 0.065, -0.03, 0]}
+                  rotation={[0, 0, side * -0.65]}
+                  scale={[0.85, 1.45, 0.85]}
+                  castShadow
+                >
+                  <sphereGeometry args={[0.062, 12, 10]} />
+                  <meshStandardMaterial color="#5c3a21" roughness={0.65} />
+                </mesh>
+              </group>
+            ))}
+          </group>
+
+          {/* Raised Right Arm holding her Sparkling Silver Star-Rapier ('Funkelnder Sternen-Degen')! */}
+          <group position={[0.21, 0.48, 0.08]} rotation={[0.15, 0, -0.28]}>
+            {/* Silver Bell Guard */}
+            <mesh position={[0, 0.04, 0]}>
+              <sphereGeometry args={[0.055, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.6]} />
+              <meshStandardMaterial color="#f8fafc" metalness={0.95} roughness={0.1} />
+            </mesh>
+            {/* Slender Shining Rapier Blade */}
+            <mesh position={[0, 0.3, 0]} castShadow>
+              <cylinderGeometry args={[0.008, 0.022, 0.5, 8]} />
+              <meshStandardMaterial
+                color="#ffffff"
+                emissive={isGold ? '#fef08a' : '#f43f5e'}
+                emissiveIntensity={0.5}
+                metalness={0.98}
+                roughness={0.05}
+              />
+            </mesh>
+            {/* Golden 3D Starburst Sparkle at the Blade Tip! */}
+            <mesh position={[0, 0.54, 0]} scale={[0.055, 0.055, 0.055]}>
+              <octahedronGeometry args={[1, 0]} />
+              <meshBasicMaterial color="#fde047" />
+            </mesh>
+          </group>
+        </group>
+      )}
+
+      {/* ==================== 5. COUSIN TANK ('r' – Der Cousin mit Zinnen-Schultern & Panzerfäusten / Turm) ==================== */}
+      {role === 'r' && (
+        <group>
+          {/* Heavy Gunmetal Fortress Boots & Legs in Wide Power Stance */}
+          {[-0.1, 0.1].map((lx, idx) => (
+            <mesh key={`r-leg-${idx}`} position={[lx, 0.14, 0]} castShadow>
+              <boxGeometry args={[0.11, 0.26, 0.12]} />
+              <meshStandardMaterial
+                color={isGold ? '#27272a' : '#1e1b4b'}
+                metalness={0.8}
+                roughness={0.28}
+              />
+            </mesh>
+          ))}
+
+          {/* Extra-Wide Muscular Dark Steel Fortress Chestplate */}
+          <mesh position={[0, 0.42, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.22, 0.17, 0.34, 12]} />
+            <meshStandardMaterial
+              color={isFrozen ? '#38bdf8' : isGold ? '#3f3f46' : '#1e1b4b'}
+              metalness={0.82}
+              roughness={0.26}
+            />
+          </mesh>
+          {/* Heavy Leather Belt & Bronze Buckle */}
+          <mesh position={[0, 0.28, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.175, 0.028, 8, 16]} />
+            <meshStandardMaterial color="#78350f" roughness={0.6} />
+          </mesh>
+          <mesh position={[0, 0.28, 0.18]}>
+            <boxGeometry args={[0.075, 0.058, 0.025]} />
+            <meshStandardMaterial color="#d97706" metalness={0.88} />
+          </mesh>
+
+          {/* TWO MASSIVE CASTLE-TURRET SHOULDER PAULDRONS WITH REAL 3D BATTLEMENTS ('Zinnen-Schultern')! */}
+          {[-1, 1].map((side) => (
+            <group key={`r-turret-${side}`} position={[side * 0.26, 0.54, 0]}>
+              <mesh castShadow>
+                <cylinderGeometry args={[0.11, 0.1, 0.16, 12]} />
+                <meshStandardMaterial
+                  color={isGold ? '#3f3f46' : '#312e81'}
+                  metalness={0.82}
+                  roughness={0.25}
+                />
+              </mesh>
+              {/* 4 Castle Battlement Merlons on Top of each Shoulder Turret */}
+              {[0, 1, 2, 3].map((mIdx) => {
+                const a = (mIdx * Math.PI) / 2 + Math.PI / 4;
+                return (
+                  <mesh
+                    key={`r-merlon-${mIdx}`}
+                    position={[Math.cos(a) * 0.075, 0.1, Math.sin(a) * 0.075]}
+                  >
+                    <boxGeometry args={[0.045, 0.055, 0.045]} />
+                    <meshStandardMaterial
+                      color={isGold ? '#52525b' : '#4c1d95'}
+                      metalness={0.85}
+                    />
+                  </mesh>
+                );
+              })}
+            </group>
+          ))}
+
+          {/* Chibi Head + Short Dark Hair + Full Beard + BIG BEAMING WHITE GRIN! */}
+          <ChibiHead3D
+            headY={0.73}
+            headRadius={0.155}
+            skinColor={skinColor}
+            eyeColor={isGold ? '#27272a' : enemyEyeGlow}
+            browColor="#18181b"
+            isGold={isGold}
+            hasBigToothGrin
+          />
+          {/* Short Cropped Dark Hair */}
+          <mesh position={[0, 0.78, -0.01]} scale={[1.02, 0.88, 1.02]}>
+            <sphereGeometry args={[0.156, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+            <meshStandardMaterial color="#18181b" roughness={0.8} />
+          </mesh>
+          {/* Short Dark Jaw Beard framing his Big White Smile */}
+          <mesh position={[0, 0.67, 0.045]} scale={[0.98, 0.62, 0.86]}>
+            <sphereGeometry args={[0.15, 16, 12]} />
+            <meshStandardMaterial color="#18181b" roughness={0.85} />
+          </mesh>
+
+          {/* TWO GIGANTIC TITAN CRUSHER GAUNTLET FISTS ('Titanen-Panzerfäuste')! */}
+          {[-1, 1].map((side) => (
+            <group
+              key={`r-fist-${side}`}
+              position={[side * 0.31, 0.31, 0.08]}
+              rotation={[0.25, 0, side * -0.15]}
+            >
+              {/* Crenellated Forearm Cuff */}
+              <mesh position={[0, 0.09, 0]} castShadow>
+                <cylinderGeometry args={[0.075, 0.085, 0.14, 10]} />
+                <meshStandardMaterial color={isGold ? '#3f3f46' : '#312e81'} metalness={0.85} />
+              </mesh>
+              {/* Giant Armored Crusher Fist */}
+              <mesh position={[0, -0.02, 0.02]} castShadow>
+                <boxGeometry args={[0.15, 0.15, 0.16]} />
+                <meshStandardMaterial
+                  color={isGold ? '#27272a' : '#4c1d95'}
+                  emissive={isGold ? '#10b981' : '#f43f5e'}
+                  emissiveIntensity={0.2}
+                  metalness={0.88}
+                  roughness={0.22}
+                />
+              </mesh>
+            </group>
+          ))}
+        </group>
+      )}
+
+      {/* ==================== 6. BEIDE COUSINEN ('p' – 2 Skins: Cousine Dolch & Cousine Rune!) ==================== */}
+      {role === 'p' && !useSecondarySkin && (
+        /* SKIN 1: COUSINE DOLCH (Waldläuferin mit grüner Kapuze, dunklem lockigem Haar & Zwillings-Runendolchen) */
+        <group>
+          {/* Brown Leather Ranger Boots */}
+          {[-0.07, 0.07].map((lx, idx) => (
+            <mesh key={`p1-leg-${idx}`} position={[lx, 0.12, 0]} castShadow>
+              <cylinderGeometry args={[0.045, 0.05, 0.22, 10]} />
+              <meshStandardMaterial color="#78350f" roughness={0.65} />
+            </mesh>
+          ))}
+
+          {/* Forest-Green Ranger Tunic & Crossed Leather Straps */}
+          <mesh position={[0, 0.35, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.125, 0.165, 0.32, 16]} />
+            <meshStandardMaterial
+              color={isFrozen ? '#38bdf8' : isGold ? '#166534' : '#1e1b4b'}
+              roughness={0.5}
+            />
+          </mesh>
+          {/* Flowing Forest Cloak */}
+          <mesh position={[0, 0.34, -0.13]} rotation={[0.22, 0, 0]} castShadow>
+            <boxGeometry args={[0.3, 0.44, 0.035]} />
+            <meshStandardMaterial color={isGold ? '#14532d' : '#312e81'} roughness={0.6} />
+          </mesh>
+
+          {/* Chibi Head + Dark Wavy Hair Locks + Pointed Forest-Green Ranger Hood */}
+          <ChibiHead3D
+            headY={0.65}
+            headRadius={0.148}
+            skinColor={skinColor}
+            eyeColor={isGold ? '#15803d' : enemyEyeGlow}
+            browColor="#1c1917"
+            isGold={isGold}
+            hasRedLips
+          />
+          {/* Long Dark Brown/Black Wavy Hair Locks framing her Shoulders */}
+          {[-0.13, 0.13].map((hx, idx) => (
+            <mesh key={`p1-hair-${idx}`} position={[hx, 0.56, 0.03]} scale={[0.8, 1.35, 0.8]}>
+              <sphereGeometry args={[0.058, 10, 10]} />
+              <meshStandardMaterial color="#1c1917" roughness={0.7} />
+            </mesh>
+          ))}
+          {/* Sculpted 3D Forest-Green Ranger Hood over Head */}
+          <mesh position={[0, 0.69, -0.02]} scale={[1.1, 1.08, 1.1]} castShadow>
+            <sphereGeometry args={[0.155, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.68]} />
+            <meshStandardMaterial color={isGold ? '#15803d' : '#3b0764'} roughness={0.55} />
+          </mesh>
+          {/* Pointed Hood Peak at Back */}
+          <mesh position={[0, 0.78, -0.1]} rotation={[-0.6, 0, 0]}>
+            <coneGeometry args={[0.08, 0.14, 8]} />
+            <meshStandardMaterial color={isGold ? '#15803d' : '#3b0764'} roughness={0.55} />
+          </mesh>
+
+          {/* TWIN GLOWING CYAN RUNIC DAGGERS ('Zwillings-Runendolche') in Left & Right Hands! */}
+          {[-1, 1].map((side) => (
+            <group
+              key={`p1-dagger-${side}`}
+              position={[side * 0.23, 0.34, 0.12]}
+              rotation={[0.4, 0, side * -0.65]}
+            >
+              <mesh>
+                <boxGeometry args={[0.06, 0.02, 0.025]} />
+                <meshStandardMaterial color="#d97706" metalness={0.85} />
+              </mesh>
+              <mesh position={[0, 0.11, 0]}>
+                <coneGeometry args={[0.024, 0.2, 4]} />
+                <meshBasicMaterial color={isGold ? '#38bdf8' : '#f43f5e'} />
+              </mesh>
+            </group>
+          ))}
+        </group>
+      )}
+
+      {role === 'p' && useSecondarySkin && (
+        /* SKIN 2: COUSINE RUNE (Schwarzes Kopftuch mit Silberborte, echtes Hahnentritt-Gewand & leuchtender lila Arkan-Bogen!) */
+        <group>
+          {/* Inner Skirt & Sleeves with Authentic Black-and-White HOUNDSTOOTH (Hahnentritt) Texture! */}
+          <mesh position={[0, 0.26, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.115, 0.21, 0.48, 20]} />
+            <meshStandardMaterial
+              color={isFrozen ? '#38bdf8' : isGold ? '#ffffff' : '#4c1d95'}
+              map={isGold ? houndstoothTex : null}
+              roughness={0.45}
+            />
+          </mesh>
+          {/* Tailored Black Leather Open Coat/Vest Panels on Left & Right with Silver Clasps */}
+          {[-0.085, 0.085].map((cx, idx) => (
+            <mesh key={`p2-coat-${idx}`} position={[cx, 0.3, 0.02]} castShadow>
+              <cylinderGeometry
+                args={[0.075, 0.11, 0.42, 12, 1, false, idx === 0 ? Math.PI : 0, Math.PI]}
+              />
+              <meshStandardMaterial color="#18181b" roughness={0.35} metalness={0.2} />
+            </mesh>
+          ))}
+          {/* Silver Chest Clasps */}
+          {[0.4, 0.46].map((cy, idx) => (
+            <mesh key={`p2-clasp-${idx}`} position={[0, cy, 0.13]}>
+              <boxGeometry args={[0.065, 0.016, 0.015]} />
+              <meshStandardMaterial color="#e2e8f0" metalness={0.9} />
+            </mesh>
+          ))}
+
+          {/* Houndstooth (Hahnentritt) Sleeves */}
+          {[-1, 1].map((side) => (
+            <mesh
+              key={`p2-sleeve-${side}`}
+              position={[side * 0.18, 0.41, 0.04]}
+              rotation={[0.35, 0, side * -0.25]}
+            >
+              <cylinderGeometry args={[0.038, 0.044, 0.2, 10]} />
+              <meshStandardMaterial
+                color={isGold ? '#ffffff' : '#312e81'}
+                map={isGold ? houndstoothTex : null}
+                roughness={0.45}
+              />
+            </mesh>
+          ))}
+
+          {/* Chibi Head + Sleek Black Hijab with Silver Forehead Embroidery */}
+          <ChibiHead3D
+            headY={0.66}
+            headRadius={0.148}
+            skinColor={skinColor}
+            eyeColor={isGold ? '#451a03' : enemyEyeGlow}
+            browColor="#18181b"
+            isGold={isGold}
+            hasRedLips
+          />
+          {/* Sculpted 3D Sleek Black Hijab */}
+          <mesh position={[0, 0.68, -0.018]} scale={[1.07, 1.05, 1.07]} castShadow>
+            <sphereGeometry args={[0.152, 20, 16]} />
+            <meshStandardMaterial color="#18181b" roughness={0.4} />
+          </mesh>
+          <mesh position={[0, 0.52, 0]}>
+            <cylinderGeometry args={[0.135, 0.17, 0.11, 16]} />
+            <meshStandardMaterial color="#18181b" roughness={0.4} />
+          </mesh>
+          {/* Silver Forehead Trim on Hijab */}
+          <mesh position={[0, 0.75, 0.13]} rotation={[0.2, 0, 0]}>
+            <torusGeometry args={[0.09, 0.012, 8, 16, Math.PI]} />
+            <meshStandardMaterial color="#e2e8f0" metalness={0.9} roughness={0.15} />
+          </mesh>
+
+          {/* GLOWING PURPLE ARCANE RECURVE BOW & CRYSTAL ARROW ('Arkan-Bogen')! */}
+          <group position={[0.02, 0.36, 0.18]} rotation={[0.15, 0, -0.35]}>
+            {/* Silver & Violet Recurve Bow Arc */}
+            <mesh rotation={[0, 0, -Math.PI / 2]}>
+              <torusGeometry args={[0.22, 0.02, 10, 24, Math.PI]} />
+              <meshStandardMaterial
+                color="#cbd5e1"
+                emissive="#a855f7"
+                emissiveIntensity={0.6}
+                metalness={0.88}
+                roughness={0.15}
+              />
+            </mesh>
+            {/* Glowing Violet Bowstring */}
+            <mesh position={[0, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.004, 0.004, 0.44, 6]} />
+              <meshBasicMaterial color="#e879f9" />
+            </mesh>
+            {/* Nocked Glowing Violet Crystal Arrow */}
+            <mesh position={[0, 0.12, 0.02]}>
+              <cylinderGeometry args={[0.006, 0.006, 0.32, 6]} />
+              <meshBasicMaterial color="#f0abfc" />
+            </mesh>
+            <mesh position={[0, 0.29, 0.02]} scale={[0.032, 0.065, 0.02]}>
+              <octahedronGeometry args={[1, 0]} />
+              <meshBasicMaterial color="#e879f9" />
+            </mesh>
+          </group>
+        </group>
+      )}
+
+      {/* ==================== WORLD-THEME COSTUME BADGE / AURA ACCENT ==================== */}
+      {/* Ramadan Golden Crescent Badge above/on Figure or Halloween Mini Jack-o'-Lantern Charm */}
+      {specialTheme === 'ramadan' && (
+        <group position={[0, 0.52, 0.17]}>
+          <mesh rotation={[0, 0, Math.PI / 4]}>
+            <torusGeometry args={[0.032, 0.008, 8, 16, Math.PI * 1.4]} />
+            <meshBasicMaterial color="#fde047" />
+          </mesh>
+        </group>
+      )}
+      {specialTheme === 'halloween' && (
+        <group position={[-0.18, 0.28, 0.15]}>
+          <mesh>
+            <sphereGeometry args={[0.042, 10, 10]} />
+            <meshStandardMaterial
+              color="#f97316"
+              emissive="#ea580c"
+              emissiveIntensity={0.65}
+            />
+          </mesh>
+        </group>
+      )}
+      {/* Enemy Team ('b') Spiked Shadow-Clone Shoulder Horns so Opponent is 100% Unmistakable! */}
+      {!isGold && (
+        <group position={[0, 0.54, 0]}>
+          <mesh position={[-0.22, 0.06, -0.02]} rotation={[0, 0, 0.55]}>
+            <coneGeometry args={[0.042, 0.15, 6]} />
+            <meshBasicMaterial color={enemyEyeGlow} />
+          </mesh>
+          <mesh position={[0.22, 0.06, -0.02]} rotation={[0, 0, -0.55]}>
+            <coneGeometry args={[0.042, 0.15, 6]} />
+            <meshBasicMaterial color={enemyEyeGlow} />
+          </mesh>
         </group>
       )}
     </group>
@@ -1528,10 +1869,11 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       <group ref={ghost1Ref} visible={false}>
         <mesh
-          geometry={ getRoleLatheGeometry(role) }
+          position={[0, 0.45, 0]}
           scale={[baseScale * 0.92, baseScale * 0.92, baseScale * 0.92]}
           raycast={noOpRaycast}
         >
+          <capsuleGeometry args={[0.16, 0.48, 8, 12]} />
           <meshBasicMaterial
             color={primaryTeamColor}
             transparent
@@ -1544,10 +1886,11 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
 
       <group ref={ghost2Ref} visible={false}>
         <mesh
-          geometry={ getRoleLatheGeometry(role) }
+          position={[0, 0.45, 0]}
           scale={[baseScale * 0.8, baseScale * 0.8, baseScale * 0.8]}
           raycast={noOpRaycast}
         >
+          <capsuleGeometry args={[0.16, 0.48, 8, 12]} />
           <meshBasicMaterial
             color={primaryTeamColor}
             transparent
