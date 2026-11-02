@@ -1283,41 +1283,6 @@ const BattleChessClash3D: React.FC<{
         speed={3.4}
         color={classSignature.color}
       />
-
-      {/* Sleek Game-Designer Combat Callout Pill (Positioned high enough so the 3D duel below is 100% unobstructed!) */}
-      <Html position={[0, 2.85, 0]} center zIndexRange={[40, 0]}>
-        <div className="pointer-events-none flex flex-col items-center gap-1">
-          <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-slate-950/90 border-2 border-amber-400/90 backdrop-blur-md shadow-[0_0_30px_rgba(251,191,36,0.65)]">
-            <img
-              src={effect.attackerSprite}
-              alt={effect.attackerName}
-              className="w-11 h-11 rounded-xl object-cover border-2 border-amber-400 shadow"
-            />
-            <div className="text-center px-1">
-              <div className="text-[9px] font-black uppercase tracking-widest text-amber-300">
-                {classSignature.badge}
-              </div>
-              <div className="text-xs sm:text-sm font-extrabold text-white whitespace-nowrap">
-                {effect.attackerName}{' '}
-                <span className="text-amber-400">⚔️</span> {effect.defenderName}
-              </div>
-              <div className="text-[10px] font-bold text-amber-200/95 max-w-[230px] truncate italic">
-                „{effect.quote}“
-              </div>
-            </div>
-            <div className="relative">
-              <img
-                src={effect.defenderSprite}
-                alt={effect.defenderName}
-                className="w-9 h-9 rounded-xl object-cover border border-purple-400 opacity-80 -rotate-12"
-              />
-              <span className="absolute -top-2.5 -right-1 text-sm">
-                {kidMode ? '🪂' : '💎'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </Html>
     </group>
   );
 };

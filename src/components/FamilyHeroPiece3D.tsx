@@ -1918,67 +1918,24 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         />
       </group>
 
-      {/* 3D Comic Speech Bubble for King in Check or Hero Action! */}
-      {(isCheckThreatened || showActionBubble) && (
+      {/* Optional Nameplate (ONLY rendered when explicitly enabled in Menu Settings!) */}
+      {showNameplate && (
         <Html
-          position={[0, topY + baseScale * 1.12, 0]}
+          position={[0, topY + baseScale * 1.02, 0]}
           center
-          zIndexRange={[20, 0]}
+          zIndexRange={[10, 0]}
         >
-          {isCheckThreatened ? (
-            <div className="pointer-events-none px-2.5 py-1 rounded-2xl bg-red-600/95 text-white text-[11px] font-black whitespace-nowrap shadow-[0_0_20px_rgba(239,68,68,0.8)] border-2 border-amber-300 animate-bounce">
-              😱 SCHACH! Beschützt mich!
-            </div>
-          ) : (
-            <div
-              className={`pointer-events-none px-2.5 py-0.5 rounded-2xl text-[10px] font-extrabold whitespace-nowrap shadow-lg border backdrop-blur-md animate-pulse ${
-                isGoldTeam
-                  ? 'bg-amber-950/95 text-amber-200 border-amber-400'
-                  : 'bg-purple-950/95 text-purple-200 border-purple-400'
-              }`}
-            >
-              {isPromoted
-                ? `👑 ${displayName} gekrönt!`
-                : isAttacking
-                ? `⚔️ „${heroConfig.battleCry}“`
-                : role === 'n'
-                ? `✨ Hoppala-Sprung!`
-                : `⚡ ${displayName}!`}
-            </div>
-          )}
+          <div
+            className={`pointer-events-none px-1.5 py-0.5 rounded-full text-[9px] font-bold whitespace-nowrap shadow border backdrop-blur-sm ${
+              isGoldTeam
+                ? 'bg-amber-950/85 text-amber-200 border-amber-400/70'
+                : 'bg-purple-950/85 text-purple-200 border-purple-400/70'
+            }`}
+          >
+            {displayName}
+          </div>
         </Html>
       )}
-
-      {/* Floating RPG Hero Badge */}
-      {!isCheckThreatened &&
-        !showActionBubble &&
-        (hovered || isSelected || showNameplate || isShielded || isFrozen) && (
-          <Html
-            position={[0, topY + baseScale * 1.05, 0]}
-            center
-            zIndexRange={[10, 0]}
-          >
-            <div
-              className={`pointer-events-none px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap shadow-md border backdrop-blur-md transition-all ${
-                isFrozen
-                  ? 'bg-sky-950/95 text-sky-200 border-sky-400'
-                  : isShielded
-                  ? 'bg-amber-900/95 text-amber-100 border-yellow-300'
-                  : isGoldTeam
-                  ? 'bg-amber-950/90 text-amber-200 border-amber-400/80'
-                  : 'bg-purple-950/90 text-purple-200 border-purple-400/80'
-              }`}
-            >
-              <span className="mr-1">
-                {isFrozen ? '❄️' : isShielded ? '🛡️' : isGoldTeam ? '☀️' : '🌙'}
-              </span>
-              {displayName}
-              <span className="opacity-70 font-normal ml-1">
-                ({heroConfig.chessName})
-              </span>
-            </div>
-          </Html>
-        )}
     </group>
   );
 };

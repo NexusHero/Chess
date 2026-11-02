@@ -60,6 +60,7 @@ import { soundFX } from './utils/sound';
 const STORAGE_KEY_HEROES = 'family_dungeon_chess_heroes_v2';
 const STORAGE_KEY_STARS = 'family_dungeon_chess_stars_v2';
 const STORAGE_KEY_SCOREBOARD = 'family_dungeon_chess_scoreboard_v2';
+const STORAGE_KEY_MATCH_HISTORY = 'family_dungeon_chess_match_history_v1';
 const PEER_PREFIX = 'fdc-room-';
 
 export type GameMode = 'campaign' | 'local2p' | 'online' | 'treasure';
@@ -68,6 +69,36 @@ export interface FamilyScoreboard {
   goldWins: number;
   purpleWins: number;
   treasureWins: number;
+}
+
+export interface MoveLogEntry {
+  moveIndex: number;
+  turnNumber: number;
+  color: 'w' | 'b';
+  role: PieceRole;
+  heroName: string;
+  chessName: string;
+  from: string;
+  to: string;
+  san: string;
+  capturedRole?: PieceRole;
+  capturedHeroName?: string;
+  isCheck?: boolean;
+  isCheckmate?: boolean;
+  promotedToHeroName?: string;
+  timestamp: string;
+}
+
+export interface MatchHistoryRecord {
+  id: string;
+  dateLabel: string;
+  levelName: string;
+  gameMode: GameMode;
+  resultLabel: string;
+  winnerColor: 'w' | 'b' | 'draw' | 'aborted';
+  totalMoves: number;
+  moves: MoveLogEntry[];
+  pgn: string;
 }
 
 export const App: React.FC = () => {
@@ -161,9 +192,23 @@ export const App: React.FC = () => {
     colorClass: string;
   } | null>(null);
   const [isChronicleOpen, setIsChronicleOpen] = useState<boolean>(false);
-  const [isCleanHudMode, setIsCleanHudMode] = useState<boolean>(false);
-  const [pillSpinning, setPillSpinning] = useState<boolean>(false);
-  const [showPillHeroTooltip, setShowPillHeroTooltip] = useState<boolean>(false);
+  const [isMatchActive, setIsMatchActive] = useState<boolean>(false);
+  const [menuTab, setMenuTab] = useState<'settings' | 'history'>('settings');
+  const [currentMoveLog, setCurrentMoveLog] = useState<MoveLogEntry[]>([]);
+  const [matchHistoryArchive, setMatchHistoryArchive] = useState<
+    MatchHistoryRecord[]
+  >(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_MATCH_HISTORY);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+  const [expandedArchiveId, setExpandedArchiveId] = useState<string | null>(
+    null
+  );
   const [battleScars, setBattleScars] = useState<Record<string, number>>({});
   const [threatRadarEnabled, setThreatRadarEnabled] = useState<boolean>(false);
 
@@ -487,7 +532,77 @@ export const App: React.FC = () => {
         setSelectedSquare(null);
         setHintMove(null);
         setLastMove({ from, to });
-        setMoveHistory(game.history());
+        const updatedSanHistory = game.history();
+        setMoveHistory(updatedSanHistory);
+
+        const attackerRole = moveResult.piece as PieceRole;
+        const attackerHero = heroes[attackerRole];
+        const capturedRole = moveResult.captured as PieceRole | undefined;
+        const capturedHero = capturedRole ? heroes[capturedRole] : undefined;
+        const nowTime = new Date().toLocaleTimeString('de-DE', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
+
+        const newLogEntry: MoveLogEntry = {
+          moveIndex: updatedSanHistory.length,
+          turnNumber: Math.ceil(updatedSanHistory.length / 2),
+          color: moveResult.color,
+          role: attackerRole,
+          heroName: attackerHero.customName,
+          chessName: attackerHero.chessName,
+          from,
+          to,
+          san: moveResult.san,
+          capturedRole,
+          capturedHeroName: capturedHero?.customName,
+          isCheck: game.inCheck(),
+          isCheckmate: game.isCheckmate(),
+          promotedToHeroName: moveResult.promotion
+            ? heroes[promotionRole].customName
+            : undefined,
+          timestamp: nowTime,
+        };
+
+        setCurrentMoveLog((prev) => {
+          const nextLog = [...prev, newLogEntry];
+          if (game.isCheckmate() || game.isDraw()) {
+            const record: MatchHistoryRecord = {
+              id: `${Date.now()}`,
+              dateLabel: new Date().toLocaleString('de-DE', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+              levelName: currentLevel.name,
+              gameMode,
+              resultLabel: game.isCheckmate()
+                ? moveResult.color === 'w'
+                  ? '🏆 Sieg Team Gold (Schachmatt)'
+                  : '🌙 Sieg Team Gegner (Schachmatt)'
+                : '🤝 Unentschieden',
+              winnerColor: game.isCheckmate() ? moveResult.color : 'draw',
+              totalMoves: nextLog.length,
+              moves: nextLog,
+              pgn: game.pgn(),
+            };
+            setMatchHistoryArchive((oldArchive) => {
+              const updatedArchive = [record, ...oldArchive].slice(0, 25);
+              try {
+                localStorage.setItem(
+                  STORAGE_KEY_MATCH_HISTORY,
+                  JSON.stringify(updatedArchive)
+                );
+              } catch {
+                // ignore
+              }
+              return updatedArchive;
+            });
+          }
+          return nextLog;
+        });
 
         // Broadcast move to online family peer if connected
         if (!isRemoteMove && connRef.current && connRef.current.open) {
@@ -500,7 +615,6 @@ export const App: React.FC = () => {
           });
         }
 
-        const attackerRole = moveResult.piece as PieceRole;
         const voiceUrl = heroes[attackerRole]?.customAudioDataUrl;
 
         if (moveResult.captured) {
@@ -871,6 +985,7 @@ export const App: React.FC = () => {
   const handleNewGame = () => {
     if (gameMode === 'treasure') {
       loadTreasureQuest(questIndex);
+      setCurrentMoveLog([]);
       return;
     }
     gameRef.current = new Chess();
@@ -880,6 +995,7 @@ export const App: React.FC = () => {
     setHintMove(null);
     setCaptureEffect(null);
     setMoveHistory([]);
+    setCurrentMoveLog([]);
     setCapturedByGold([]);
     setCapturedByPurple([]);
     setGoldPowerUsed(false);
@@ -899,20 +1015,68 @@ export const App: React.FC = () => {
     }
   };
 
+  // Start a new match from the Menu (locks Settings until the match ends!)
+  const handleStartMatch = () => {
+    handleNewGame();
+    setIsMatchActive(true);
+    setIsChronicleOpen(false);
+  };
+
+  // End the current match, save its history if moves were made, and return to the Menu (unlocking Settings!)
+  const handleEndMatchAndOpenMenu = () => {
+    const game = gameRef.current;
+    if (
+      currentMoveLog.length > 0 &&
+      !game.isCheckmate() &&
+      !game.isDraw()
+    ) {
+      const record: MatchHistoryRecord = {
+        id: `${Date.now()}`,
+        dateLabel: new Date().toLocaleString('de-DE', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        levelName: currentLevel.name,
+        gameMode,
+        resultLabel: `🏳️ Beendet nach ${currentMoveLog.length} Halbzügen`,
+        winnerColor: 'aborted',
+        totalMoves: currentMoveLog.length,
+        moves: currentMoveLog,
+        pgn: game.pgn(),
+      };
+      setMatchHistoryArchive((oldArchive) => {
+        const updatedArchive = [record, ...oldArchive].slice(0, 25);
+        try {
+          localStorage.setItem(
+            STORAGE_KEY_MATCH_HISTORY,
+            JSON.stringify(updatedArchive)
+          );
+        } catch {
+          // ignore
+        }
+        return updatedArchive;
+      });
+    }
+    setIsMatchActive(false);
+    setIsChronicleOpen(false);
+    soundFX.playSelect();
+  };
+
   const handleUndo = () => {
     const game = gameRef.current;
     if (game.history().length === 0 || isAIThinking || gameMode === 'treasure')
       return;
-    if (gameMode === 'campaign') {
-      game.undo();
-      game.undo();
-    } else {
+    const undoCount = gameMode === 'campaign' ? 2 : 1;
+    for (let i = 0; i < undoCount; i++) {
       game.undo();
     }
     setFen(game.fen());
     setSelectedSquare(null);
     setHintMove(null);
     setMoveHistory(game.history());
+    setCurrentMoveLog((prev) => prev.slice(0, Math.max(0, prev.length - undoCount)));
     soundFX.playSelect();
   };
 
@@ -1106,597 +1270,734 @@ export const App: React.FC = () => {
         ))}
       </div>
 
-      {/* TOP HUD: Title, Level Switcher (1-3) & Mode Controls */}
-      <header
-        className={`relative z-10 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-2.5 bg-gradient-to-b from-black/85 via-black/55 to-transparent pointer-events-auto transition-all duration-300 ${
-          isCleanHudMode ? 'hidden' : ''
-        }`}
-      >
-        {/* Brand Title */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/30 border border-amber-200">
-            <Crown className="w-6 h-6 text-black" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-dungeon text-base sm:text-xl font-black tracking-wider text-amber-200 drop-shadow">
-                FAMILY DUNGEON CHESS
-              </h1>
-              <span className="hidden lg:inline-block px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40">
-                v2.0 Royal Edition
-              </span>
-            </div>
-            <p className="text-[11px] text-amber-100/75 hidden sm:block">
-              {gameMode === 'treasure'
-                ? `${currentQuest.title}`
-                : `${currentLevel.name} — ${currentLevel.subtitle}`}
-            </p>
-          </div>
-        </div>
-
-        {/* 3 Dungeon Levels + Ramadan & Halloween Special Themes Selector */}
-        <div className="flex items-center gap-1 bg-black/60 p-1 rounded-2xl border border-amber-500/30 backdrop-blur-md flex-wrap">
-          {DUNGEON_LEVELS.map((lvl) => {
-            const active = lvl.id === currentLevelId;
-            const stars = levelStars[lvl.id] || 0;
-            const isRamadan = lvl.specialTheme === 'ramadan';
-            const isHalloween = lvl.specialTheme === 'halloween';
-            return (
-              <button
-                key={lvl.id}
-                onClick={() => {
-                  setCurrentLevelId(lvl.id);
-                  soundFX.playSelect();
-                }}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
-                  active
-                    ? isRamadan
-                      ? 'bg-gradient-to-r from-emerald-500 to-amber-400 text-black shadow-md'
-                      : isHalloween
-                      ? 'bg-gradient-to-r from-orange-500 to-purple-600 text-white shadow-md'
-                      : 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-md'
-                    : isRamadan
-                    ? 'text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/30'
-                    : isHalloween
-                    ? 'text-orange-300 hover:bg-orange-500/20 border border-orange-500/30'
-                    : 'text-amber-100/75 hover:bg-white/10'
-                }`}
-              >
-                <span>{lvl.shortLabel}</span>
-                <span className="text-[10px]">
-                  {stars > 0 ? '👑'.repeat(stars) : lvl.badgeEmoji}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* 4 Game Modes + Family Studio + Sound */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="flex bg-black/60 p-1 rounded-xl border border-white/15">
-            <button
-              onClick={() => {
-                setGameMode('campaign');
-                handleNewGame();
-              }}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                gameMode === 'campaign'
-                  ? 'bg-amber-500 text-black'
-                  : 'text-amber-100/70 hover:text-white'
-              }`}
-              title="1-Spieler Kampagne gegen die 3 Dungeon-Bosse"
-            >
-              <Bot className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">1P Dungeon</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setGameMode('local2p');
-                handleNewGame();
-              }}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                gameMode === 'local2p'
-                  ? 'bg-purple-500 text-white'
-                  : 'text-amber-100/70 hover:text-white'
-              }`}
-              title="2-Spieler Familien-Duell am selben Gerät"
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">2P Tisch</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setGameMode('treasure');
-                loadTreasureQuest(questIndex);
-                soundFX.playSelect();
-              }}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                gameMode === 'treasure'
-                  ? 'bg-pink-500 text-white'
-                  : 'text-amber-100/70 hover:text-white'
-              }`}
-              title="Prinzessin Minis Kinder-Schatzjagd (5 Lern-Missionen)"
-            >
-              <Compass className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Schatzjagd</span>
-            </button>
-
-            <button
-              onClick={() => setIsOnlineModalOpen(true)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                gameMode === 'online' || isPeerConnected
-                  ? 'bg-emerald-500 text-black'
-                  : 'text-emerald-300 hover:text-white'
-              }`}
-              title="Online-Familien-Raum per WhatsApp-Link oder Raum-Code"
-            >
-              <Wifi className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Online-Raum</span>
-            </button>
-          </div>
-
-          <button
-            onClick={() => setIsScoreboardOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/40 transition"
-            title="Ewige Familien-Bestenliste anzeigen"
-          >
-            <Trophy className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden xl:inline">Pokale</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-black text-[10px] font-black">
-              {scoreboard.goldWins +
-                scoreboard.purpleWins +
-                scoreboard.treasureWins}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setIsHeroModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white border border-purple-300/40 shadow-lg transition"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>Familie & Stimmen</span>
-          </button>
-
-          <button
-            onClick={toggleMusic}
-            className={`p-2 rounded-xl border transition ${
-              musicEnabled
-                ? 'bg-amber-500/30 text-amber-300 border-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.35)]'
-                : 'bg-black/60 hover:bg-white/15 text-amber-200/60 border-white/15'
-            }`}
-            title={
-              musicEnabled
-                ? 'Atmosphärische Hintergrund-Musik ausschalten'
-                : 'Atmosphärische Welt-Musik einschalten (Ramadan Oud / Dungeon Harfe / Halloween Celesta)'
-            }
-          >
-            <Music className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={toggleSound}
-            className="p-2 rounded-xl bg-black/60 hover:bg-white/15 text-amber-200 border border-white/15 transition"
-            title={soundEnabled ? 'Ton ausschalten' : 'Ton einschalten'}
-          >
-            {soundEnabled ? (
-              <Volume2 className="w-4 h-4" />
-            ) : (
-              <VolumeX className="w-4 h-4 opacity-50" />
-            )}
-          </button>
-
-          <button
-            onClick={() => {
-              setIsCleanHudMode((v) => !v);
-              soundFX.playSelect();
-            }}
-            className="p-2 rounded-xl bg-black/60 hover:bg-amber-500/25 text-amber-200 border border-amber-400/30 transition"
-            title="Kino-Fokus (Menüs ausblenden für 95% 3D-Spielfeld)"
-          >
-            <Maximize2 className="w-4 h-4" />
-          </button>
-        </div>
-      </header>
-
-      {/* MIDDLE FLOATING BANNERS */}
-      <div className="relative z-10 pointer-events-none flex-1 flex flex-col justify-between p-3 sm:p-5">
-        <div className="flex flex-col items-center gap-2">
-          {/* Heartfelt Ramadan Mubarak Trilingual Greeting Banner when Ramadan Theme is active */}
-          {currentLevel.specialTheme === 'ramadan' && !isCleanHudMode && (
-            <div className="pointer-events-auto flex items-center gap-2.5 px-4 py-1 rounded-full bg-gradient-to-r from-emerald-950/90 via-teal-900/90 to-emerald-950/90 border border-amber-400/80 shadow-[0_0_25px_rgba(251,191,36,0.35)] backdrop-blur-md">
-              <span className="text-sm">🌙</span>
-              <span className="text-[11px] sm:text-xs font-extrabold tracking-wide text-amber-300">
-                رمضان كريم • Ramadan Mubarak • Hayırlı Ramazanlar
-              </span>
-              <span className="hidden md:inline text-[11px] text-emerald-200 font-semibold">
-                — Herzlicher Familien-Schachabend nach dem Iftar 🫖🌴✨
-              </span>
-            </div>
-          )}
-
-          {/* Interactive Animated Hero Status Pill (Tap for Haptics, Voice & Hero Info) */}
+      {/* =====================================================================================
+          1. MINIMAL IN-GAME TOP BAR (ONLY WHEN MATCH IS ACTIVE — ZERO OVERLAYS ON THE BOARD!)
+             Settings are LOCKED while `isMatchActive === true` and can only be changed after
+             ending the match via "🏳️ Spiel beenden"!
+         ===================================================================================== */}
+      {isMatchActive && (
+        <header className="relative z-20 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-1.5 bg-slate-950/90 border-b border-amber-500/25 backdrop-blur-md pointer-events-auto">
+          {/* Left: Active World, Turn Indicator & Locked Settings Badge */}
           <div className="flex items-center gap-2">
-            <div
-              onClick={() => {
-                soundFX.playSelect();
-                const activeHero =
-                  gameMode === 'treasure'
-                    ? heroes[currentQuest.heroRole]
-                    : turnColor === 'w'
-                    ? heroes.k
-                    : heroes.q;
-                if (activeHero.customAudioDataUrl) {
-                  soundFX.playCustomVoice(activeHero.customAudioDataUrl);
-                }
-                setPillSpinning(true);
-                setShowPillHeroTooltip((prev) => !prev);
-                setTimeout(() => setPillSpinning(false), 600);
-              }}
-              title="Tippe auf die Helden-Pille für Stimme, Haptik & Spezialkraft-Info!"
-              className={`pointer-events-auto cursor-pointer select-none flex flex-wrap items-center justify-center gap-3 px-4 py-1.5 rounded-full border-2 backdrop-blur-md transition-all duration-300 hover:scale-[1.03] active:scale-95 ${
-                gameMode === 'treasure'
-                  ? 'bg-gradient-to-r from-pink-950/90 via-black/85 to-amber-950/90 border-pink-400/70 shadow-[0_0_28px_rgba(244,114,182,0.35)]'
-                  : turnColor === 'w'
-                  ? 'bg-gradient-to-r from-amber-950/90 via-black/85 to-amber-900/85 border-amber-400/70 shadow-[0_0_28px_rgba(251,191,36,0.35)]'
-                  : 'bg-gradient-to-r from-purple-950/90 via-black/85 to-indigo-950/90 border-purple-400/70 shadow-[0_0_28px_rgba(192,132,252,0.35)]'
-              }`}
+            <span className="px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-400/30 text-[11px] font-bold text-amber-200">
+              {currentLevel.badgeEmoji} {currentLevel.shortLabel}
+            </span>
+            <span
+              className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-[10px] text-amber-100/60"
+              title="Settings können während einer laufenden Partie nicht geändert werden – erst nach Spielende!"
             >
-              <div className="relative">
-                <img
-                  src={
-                    gameMode === 'treasure'
-                      ? heroes[currentQuest.heroRole].spritePath
-                      : turnColor === 'w'
-                      ? heroes.k.spritePath
-                      : heroes.q.spritePath
-                  }
-                  alt="Aktiver Held"
-                  className={`w-8 h-8 rounded-full object-cover border-2 transition-transform duration-500 ${
-                    pillSpinning ? 'rotate-[360deg] scale-110' : ''
-                  } ${
-                    gameMode === 'treasure'
-                      ? 'border-pink-400'
-                      : turnColor === 'w'
-                      ? 'border-amber-400'
-                      : 'border-purple-400'
-                  } shadow-md`}
-                />
-                {currentLevel.specialTheme && (
-                  <span className="absolute -bottom-1 -right-1 text-[10px] leading-none drop-shadow">
-                    {currentLevel.specialTheme === 'ramadan' ? '🌙' : '🎃'}
-                  </span>
-                )}
-              </div>
-              <div
-                className={`w-2.5 h-2.5 rounded-full animate-pulse ${
-                  gameMode === 'treasure'
-                    ? 'bg-pink-400 shadow-[0_0_10px_#f472b6]'
-                    : turnColor === 'w'
-                    ? 'bg-amber-400 shadow-[0_0_10px_#fbbf24]'
-                    : 'bg-purple-400 shadow-[0_0_10px_#c084fc]'
-                }`}
-              />
-              <span className="text-xs sm:text-sm font-bold text-amber-100">
-                {gameMode === 'treasure' ? (
-                  <span>
-                    🎁 <strong>{currentQuest.title}</strong> — Noch{' '}
-                    <strong className="text-amber-300">
-                      {remainingTreasures.length}
-                    </strong>{' '}
-                    Schatztruhen! (Züge: {questMovesCount})
-                  </span>
-                ) : isCheckmate ? (
-                  <span className="text-amber-300 font-extrabold">
-                    🏆 SCHACHMATT!{' '}
-                    {turnColor === 'w'
-                      ? 'Team Kristall-Violett'
-                      : 'Team Gold-Licht'}{' '}
-                    gewinnt!
-                  </span>
-                ) : isDraw ? (
-                  <span>🤝 Unentschieden im Dungeon!</span>
-                ) : isAIThinking ? (
-                  <span className="text-purple-300">
-                    🔮 {currentLevel.bossName} überlegt seinen Zug...
-                  </span>
-                ) : turnColor === 'w' ? (
-                  <span>
-                    ☀️ Team Gold ({heroes.k.customName} & {heroes.q.customName})
-                    ist am Zug
-                  </span>
-                ) : gameMode === 'local2p' || gameMode === 'online' ? (
-                  <span>🌙 Team Kristall-Violett ist am Zug</span>
-                ) : (
-                  <span>🌙 {currentLevel.bossName} ist am Zug</span>
-                )}
-              </span>
+              🔒 Settings gesperrt
+            </span>
+
+            <div className="h-4 w-px bg-white/15 mx-0.5 hidden sm:block" />
+
+            {/* Compact Turn Status */}
+            <div className="flex items-center gap-1.5 text-xs font-bold">
+              {gameMode === 'treasure' ? (
+                <span className="text-pink-300">
+                  🎁 Noch {remainingTreasures.length} Truhen ({questMovesCount} Züge)
+                </span>
+              ) : isAIThinking ? (
+                <span className="text-purple-300 animate-pulse">
+                  🔮 Gegner zieht...
+                </span>
+              ) : turnColor === 'w' ? (
+                <span className="text-amber-300">☀️ Team Gold am Zug</span>
+              ) : (
+                <span className="text-purple-300">🌙 Team Gegner am Zug</span>
+              )}
 
               {isCheck && !isCheckmate && (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[11px] font-extrabold animate-bounce">
-                  <ShieldAlert className="w-3.5 h-3.5" />
+                <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black animate-bounce">
                   SCHACH!
                 </span>
               )}
-
-              {moveQualityBadge && gameMode !== 'treasure' && (
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border shadow-md animate-pulse ${moveQualityBadge.colorClass}`}
-                >
-                  {moveQualityBadge.label}
-                </span>
-              )}
             </div>
-
-            {isCleanHudMode && (
-              <button
-                onClick={() => {
-                  setIsCleanHudMode(false);
-                  soundFX.playSelect();
-                }}
-                className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/80 hover:bg-amber-500/30 text-amber-200 border border-amber-400/50 text-xs font-bold shadow-lg backdrop-blur-md transition"
-                title="Menüleisten wieder einblenden"
-              >
-                <Minimize2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">HUD zeigen</span>
-              </button>
-            )}
           </div>
 
-          {/* Interactive Hero Pill Quick-Tooltip (toggled on tap) */}
-          {showPillHeroTooltip && (
-            <div
-              onClick={() => setShowPillHeroTooltip(false)}
-              className="pointer-events-auto cursor-pointer flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-black/90 border border-amber-400/60 backdrop-blur-md text-xs text-amber-100 shadow-xl"
-            >
-              <span className="text-amber-300 font-extrabold">
-                {(gameMode === 'treasure'
-                  ? heroes[currentQuest.heroRole]
-                  : turnColor === 'w'
-                  ? heroes.k
-                  : heroes.q
-                ).superpower.icon}{' '}
-                {(gameMode === 'treasure'
-                  ? heroes[currentQuest.heroRole]
-                  : turnColor === 'w'
-                  ? heroes.k
-                  : heroes.q
-                ).customName}
-                :
-              </span>
-              <span className="italic text-amber-100/90">
-                „
-                {(gameMode === 'treasure'
-                  ? heroes[currentQuest.heroRole]
-                  : turnColor === 'w'
-                  ? heroes.k
-                  : heroes.q
-                ).battleCry}
-                “
-              </span>
-            </div>
-          )}
-
-          {/* LiGround-Style Live Power Balance Bar (Gold vs. Kristall-Violett) */}
-          {gameMode !== 'treasure' && (
-            <div
-              className="pointer-events-auto flex items-center gap-2 w-64 sm:w-80 px-2.5 py-1 rounded-full bg-black/75 border border-white/15 backdrop-blur-md shadow-lg"
-              title="LiGround Live-Stellungsbewertung: Zeigt, welches Team gerade im Vorteil ist"
-            >
-              <span className="text-[10px] font-extrabold text-amber-300 shrink-0">
-                ☀️ {goldWinPercent}%
-              </span>
-              <div className="flex-1 h-2 rounded-full bg-purple-950 overflow-hidden flex border border-white/10">
-                <div
-                  className="h-full bg-gradient-to-r from-amber-400 to-yellow-300 transition-all duration-500"
-                  style={{ width: `${goldWinPercent}%` }}
-                />
-              </div>
-              <span className="text-[10px] font-extrabold text-purple-300 shrink-0">
-                {100 - goldWinPercent}% 🌙
-              </span>
-            </div>
-          )}
-
-          {/* Treasure Quest Switcher Bar */}
-          {gameMode === 'treasure' && (
-            <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-1.5 bg-black/80 px-3 py-1.5 rounded-2xl border border-pink-400/50">
-              {TREASURE_QUESTS.map((q, idx) => (
+          {/* Center: Camera Perspectives + Superpower (if ready) + Hint + Undo */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-0.5 bg-black/60 p-0.5 rounded-lg border border-white/15">
+              <Camera className="w-3 h-3 text-amber-400 mx-1 hidden md:inline" />
+              {(
+                [
+                  { id: 'orbit', label: '3D Frei' },
+                  { id: 'table-white', label: 'Gold' },
+                  { id: 'table-black', label: 'Gegner' },
+                  { id: 'top', label: 'Oben' },
+                ] as { id: CameraPreset; label: string }[]
+              ).map((cam) => (
                 <button
-                  key={q.id}
-                  onClick={() => {
-                    setQuestIndex(idx);
-                    loadTreasureQuest(idx);
-                    soundFX.playSelect();
-                  }}
-                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition ${
-                    questIndex === idx
-                      ? 'bg-pink-500 text-white shadow'
-                      : 'text-pink-200/75 hover:bg-white/10'
+                  key={cam.id}
+                  onClick={() => setCameraPreset(cam.id)}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition ${
+                    cameraPreset === cam.id
+                      ? 'bg-amber-500 text-black'
+                      : 'text-amber-100/70 hover:bg-white/10'
                   }`}
                 >
-                  Mission {q.id}
+                  {cam.label}
                 </button>
               ))}
-              <span className="text-xs text-amber-200/90 ml-2 hidden md:inline">
-                {currentQuest.story}
-              </span>
             </div>
-          )}
 
-          {/* Active Superpower Announcement Banner */}
-          {powerBanner && (
-            <div className="pointer-events-none px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-purple-600 text-black font-extrabold text-xs sm:text-sm shadow-2xl animate-bounce">
-              {powerBanner}
+            {canUseSuperpower && selectedPieceInfo && (
+              <button
+                onClick={handleActivateSuperpower}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-gradient-to-r from-amber-400 to-orange-500 text-black shadow animate-pulse"
+                title={`${selectedPieceInfo.hero.superpower.name}: ${selectedPieceInfo.hero.superpower.shortDesc}`}
+              >
+                <Zap className="w-3 h-3" />
+                <span>{selectedPieceInfo.hero.superpower.name}</span>
+              </button>
+            )}
+
+            {gameMode !== 'treasure' && (
+              <button
+                onClick={handleShowHint}
+                disabled={isAIThinking}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-sky-600/80 hover:bg-sky-500 text-white disabled:opacity-40"
+                title="Zug-Tipp anzeigen"
+              >
+                <Lightbulb className="w-3 h-3 text-amber-200" />
+                <span className="hidden sm:inline">Tipp</span>
+              </button>
+            )}
+
+            <button
+              onClick={handleUndo}
+              disabled={
+                moveHistory.length === 0 ||
+                isAIThinking ||
+                gameMode === 'treasure'
+              }
+              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-white/10 hover:bg-white/20 text-amber-100 disabled:opacity-35"
+              title="Zug zurücknehmen"
+            >
+              <Undo2 className="w-3 h-3" />
+              <span className="hidden sm:inline">Zurück</span>
+            </button>
+          </div>
+
+          {/* Right: Live Move History Toggle & End Match Button */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setIsChronicleOpen((v) => !v)}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
+                isChronicleOpen
+                  ? 'bg-amber-400 text-black border-amber-200'
+                  : 'bg-white/10 hover:bg-white/20 text-amber-200 border-white/15'
+              }`}
+            >
+              <span>📜 Verlauf ({currentMoveLog.length})</span>
+            </button>
+
+            <button
+              onClick={handleEndMatchAndOpenMenu}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-extrabold bg-rose-600/90 hover:bg-rose-500 text-white border border-rose-300/40 shadow transition"
+              title="Aktuelles Spiel beenden, Verlauf speichern und ins Menü & Settings zurückkehren"
+            >
+              <span>🏳️ Spiel beenden</span>
+            </button>
+          </div>
+        </header>
+      )}
+
+      {/* =====================================================================================
+          2. SLIM RIGHT-SIDE MOVE HISTORY DRAWER (SPIELVERLAUF-HISTORIE)
+         ===================================================================================== */}
+      {isMatchActive && isChronicleOpen && (
+        <aside className="fixed top-12 right-3 bottom-3 w-80 sm:w-96 z-30 rounded-2xl bg-slate-950/95 border-2 border-amber-400/50 backdrop-blur-xl shadow-2xl flex flex-col overflow-hidden pointer-events-auto">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/15 bg-black/40">
+            <div>
+              <h3 className="font-dungeon text-sm font-black text-amber-300 uppercase tracking-wider">
+                📜 Historie vom Spielverlauf
+              </h3>
+              <p className="text-[11px] text-amber-100/70">
+                {currentMoveLog.length} Halbzüge in dieser Partie
+              </p>
             </div>
-          )}
-        </div>
+            <div className="flex items-center gap-1.5">
+              {currentMoveLog.length > 0 && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(gameRef.current.pgn());
+                  }}
+                  className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 text-[10px] font-bold border border-amber-400/30"
+                >
+                  PGN kopieren
+                </button>
+              )}
+              <button
+                onClick={() => setIsChronicleOpen(false)}
+                className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
 
-        {/* Left & Right Floating Cards (Selected Hero + Superpower Trigger + Captured Pieces) */}
-        <div className="flex items-end justify-between gap-4">
-          {selectedPieceInfo ? (
-            <div className="pointer-events-auto max-w-xs sm:max-w-md p-3.5 rounded-2xl bg-black/85 border-2 border-amber-400/60 backdrop-blur-md shadow-2xl flex flex-col gap-2.5 animate-float">
-              <div className="flex items-center gap-3.5">
-                <img
-                  src={selectedPieceInfo.hero.spritePath}
-                  alt={selectedPieceInfo.hero.customName}
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-cover border-2 border-amber-300 shrink-0"
-                />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="px-2 py-0.5 rounded-md bg-amber-500 text-black text-[10px] font-extrabold uppercase">
-                      {selectedPieceInfo.hero.chessName}
+          <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+            {currentMoveLog.length === 0 ? (
+              <div className="text-center py-10 text-xs text-amber-100/50">
+                Noch keine Züge ausgeführt. Ziehe eine Figur auf dem Brett!
+              </div>
+            ) : (
+              currentMoveLog.map((entry) => (
+                <div
+                  key={entry.moveIndex}
+                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-xs ${
+                    entry.color === 'w'
+                      ? 'bg-amber-950/40 border-amber-500/30 text-amber-100'
+                      : 'bg-purple-950/40 border-purple-500/30 text-purple-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-[11px] font-black text-amber-400/80 shrink-0">
+                      {entry.turnNumber}
+                      {entry.color === 'w' ? '.' : '...'}
                     </span>
-                    <span className="text-xs font-bold text-amber-300 truncate">
-                      {selectedPieceInfo.hero.dungeonClass}
+                    <span className="text-sm shrink-0">
+                      {entry.color === 'w' ? '☀️' : '🌙'}
                     </span>
+                    <div className="min-w-0">
+                      <div className="font-bold truncate">
+                        {entry.heroName}{' '}
+                        <span className="opacity-65 font-normal">
+                          ({entry.chessName})
+                        </span>
+                      </div>
+                      <div className="text-[11px] opacity-80 flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono font-bold text-white">
+                          {entry.from.toUpperCase()} → {entry.to.toUpperCase()}
+                        </span>
+                        <span className="font-mono text-[10px] px-1.5 rounded bg-black/50">
+                          {entry.san}
+                        </span>
+                        {entry.capturedHeroName && (
+                          <span className="text-rose-300 font-bold">
+                            ⚔️ {entry.capturedHeroName}
+                          </span>
+                        )}
+                        {entry.promotedToHeroName && (
+                          <span className="text-amber-300 font-bold">
+                            👑 → {entry.promotedToHeroName}
+                          </span>
+                        )}
+                        {entry.isCheckmate && (
+                          <span className="px-1.5 rounded bg-amber-400 text-black font-black text-[10px]">
+                            SCHACHMATT
+                          </span>
+                        )}
+                        {!entry.isCheckmate && entry.isCheck && (
+                          <span className="px-1.5 rounded bg-red-600 text-white font-black text-[10px]">
+                            SCHACH
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <h3 className="font-dungeon text-base sm:text-lg font-extrabold text-white truncate mt-0.5">
-                    {selectedPieceInfo.hero.customName}
-                  </h3>
-                  <p className="text-[11px] text-amber-100/80 italic line-clamp-2">
-                    „{selectedPieceInfo.hero.battleCry}“
+                  <span className="text-[10px] font-mono opacity-55 shrink-0">
+                    {entry.timestamp}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </aside>
+      )}
+
+      {/* =====================================================================================
+          3. MAIN MENU & LOCKED SETTINGS SCREEN + MATCH HISTORY ARCHIVE (`!isMatchActive`)
+         ===================================================================================== */}
+      {!isMatchActive && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-6 overflow-y-auto">
+          <div className="max-w-3xl w-full rounded-3xl bg-gradient-to-b from-slate-900/95 via-slate-950/95 to-black/95 border-2 border-amber-400/80 shadow-[0_0_70px_rgba(251,191,36,0.35)] overflow-hidden flex flex-col max-h-[92vh]">
+            {/* Menu Header + Tab Switcher */}
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-white/15 bg-black/50">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center shadow-lg border border-amber-200">
+                  <Crown className="w-6 h-6 text-black" />
+                </div>
+                <div>
+                  <h1 className="font-dungeon text-lg sm:text-2xl font-black tracking-wider text-amber-200">
+                    FAMILY DUNGEON CHESS 3D
+                  </h1>
+                  <p className="text-xs text-amber-100/70">
+                    Hauptmenü • Settings vor Spielbeginn wählen
                   </p>
                 </div>
               </div>
 
-              {/* Dungeon Superpower Button (1x per Match) */}
-              {dungeonPowersEnabled && gameMode !== 'treasure' && (
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/15">
-                  <div className="text-[11px] text-amber-200/90">
-                    <span className="font-bold text-amber-300">
-                      {selectedPieceInfo.hero.superpower.icon}{' '}
-                      {selectedPieceInfo.hero.superpower.name}:
-                    </span>{' '}
-                    {selectedPieceInfo.hero.superpower.shortDesc}
-                  </div>
-                  <button
-                    onClick={handleActivateSuperpower}
-                    disabled={!canUseSuperpower}
-                    className={`shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-extrabold transition ${
-                      canUseSuperpower
-                        ? 'bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-black shadow-lg shadow-amber-500/30 animate-pulse'
-                        : 'bg-white/10 text-white/40 cursor-not-allowed'
-                    }`}
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>
-                      {(turnColor === 'w' && goldPowerUsed) ||
-                      (turnColor === 'b' && purplePowerUsed)
-                        ? 'Schon genutzt'
-                        : 'Superkraft zünden!'}
-                    </span>
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="hidden sm:flex pointer-events-auto items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-black/65 border border-white/10 backdrop-blur-md text-xs text-amber-100/80">
-              <Swords className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>
-                Tippe auf eine <strong>Familien-Figur</strong>, um ihre
-                leuchtenden Züge & <strong>Dungeon-Superkraft</strong> zu sehen!
-              </span>
-            </div>
-          )}
-
-          {/* Captured Pieces, Crazyhouse Parachute Comeback & Move Chronicle Pill */}
-          <div className="hidden md:flex flex-col items-end gap-1.5 pointer-events-auto">
-            {isChronicleOpen && moveHistory.length > 0 && (
-              <div className="w-64 max-h-40 overflow-y-auto p-3 rounded-2xl bg-black/90 border border-amber-400/50 backdrop-blur-md text-xs text-amber-100 shadow-2xl space-y-1">
-                <div className="flex items-center justify-between border-b border-white/15 pb-1 mb-1">
-                  <span className="font-extrabold text-amber-300 uppercase text-[10px]">
-                    📜 LiGround Zug-Chronik
+              {/* Menu Tabs: Settings vs. Spielverlauf-Historie */}
+              <div className="flex bg-black/70 p-1 rounded-xl border border-white/15">
+                <button
+                  onClick={() => setMenuTab('settings')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition ${
+                    menuTab === 'settings'
+                      ? 'bg-amber-400 text-black shadow'
+                      : 'text-amber-100/75 hover:text-white'
+                  }`}
+                >
+                  ⚙️ Spiel & Settings
+                </button>
+                <button
+                  onClick={() => setMenuTab('history')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 ${
+                    menuTab === 'history'
+                      ? 'bg-amber-400 text-black shadow'
+                      : 'text-amber-100/75 hover:text-white'
+                  }`}
+                >
+                  <span>📜 Spielverlauf-Historie</span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-white/15 text-[10px]">
+                    {matchHistoryArchive.length + (currentMoveLog.length > 0 ? 1 : 0)}
                   </span>
+                </button>
+              </div>
+            </div>
+
+            {/* TAB 1: SPIEL & SETTINGS KONFIGURATION */}
+            {menuTab === 'settings' ? (
+              <div className="p-5 overflow-y-auto space-y-5">
+                {/* 1. Spielmodus */}
+                <div className="space-y-2">
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-amber-300">
+                    1. Spielmodus wählen
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      {
+                        id: 'campaign' as GameMode,
+                        label: '1P Kampagne',
+                        sub: 'Gegen Dungeon-KI',
+                        icon: <Bot className="w-4 h-4" />,
+                      },
+                      {
+                        id: 'local2p' as GameMode,
+                        label: '2P Am Tisch',
+                        sub: 'Zu zweit am Gerät',
+                        icon: <Users className="w-4 h-4" />,
+                      },
+                      {
+                        id: 'treasure' as GameMode,
+                        label: 'Schatzjagd',
+                        sub: '5 Kinder-Missionen',
+                        icon: <Compass className="w-4 h-4" />,
+                      },
+                      {
+                        id: 'online' as GameMode,
+                        label: 'Online-Raum',
+                        sub: 'Per Raum-Code',
+                        icon: <Wifi className="w-4 h-4" />,
+                      },
+                    ].map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => {
+                          setGameMode(m.id);
+                          if (m.id === 'online') setIsOnlineModalOpen(true);
+                          soundFX.playSelect();
+                        }}
+                        className={`flex flex-col items-start p-3 rounded-2xl border text-left transition ${
+                          gameMode === m.id
+                            ? 'bg-amber-500/25 border-amber-400 text-white shadow-md'
+                            : 'bg-white/5 border-white/10 text-amber-100/75 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-extrabold text-xs text-amber-300">
+                          {m.icon}
+                          <span>{m.label}</span>
+                        </div>
+                        <span className="text-[11px] opacity-75 mt-0.5">
+                          {m.sub}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Welt / Theme (oder Schatzjagd-Mission) */}
+                {gameMode === 'treasure' ? (
+                  <div className="space-y-2">
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-pink-300">
+                      2. Schatzjagd-Mission wählen
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {TREASURE_QUESTS.map((q, idx) => (
+                        <button
+                          key={q.id}
+                          onClick={() => {
+                            setQuestIndex(idx);
+                            soundFX.playSelect();
+                          }}
+                          className={`p-3 rounded-2xl border text-left transition ${
+                            questIndex === idx
+                              ? 'bg-pink-500/25 border-pink-400 text-white'
+                              : 'bg-white/5 border-white/10 text-amber-100/75 hover:bg-white/10'
+                          }`}
+                        >
+                          <div className="text-xs font-extrabold text-pink-300">
+                            {q.title}
+                          </div>
+                          <div className="text-[11px] opacity-75 line-clamp-2 mt-0.5">
+                            {q.story}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-amber-300">
+                      2. Welt & Schachbrett-Theme wählen
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                      {DUNGEON_LEVELS.map((lvl) => {
+                        const active = lvl.id === currentLevelId;
+                        const stars = levelStars[lvl.id] || 0;
+                        return (
+                          <button
+                            key={lvl.id}
+                            onClick={() => {
+                              setCurrentLevelId(lvl.id);
+                              soundFX.playSelect();
+                            }}
+                            className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                              active
+                                ? 'bg-amber-500/25 border-amber-400 text-white shadow-md'
+                                : 'bg-white/5 border-white/10 text-amber-100/75 hover:bg-white/10'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center justify-between text-xs font-extrabold text-amber-300">
+                                <span>{lvl.shortLabel}</span>
+                                <span>
+                                  {stars > 0 ? '👑'.repeat(stars) : lvl.badgeEmoji}
+                                </span>
+                              </div>
+                              <div className="text-[11px] font-bold mt-1 line-clamp-1">
+                                {lvl.name.replace(/^Level \d:\s*/, '')}
+                              </div>
+                            </div>
+                            <div className="text-[10px] opacity-65 mt-1">
+                              {lvl.difficultyLabel.split('•')[0]}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Spielregeln & Effekt-Settings (werden beim Start gesperrt!) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-amber-300">
+                      3. Spiel-Einstellungen (während des Spiels gesperrt 🔒)
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <button
+                      onClick={() => {
+                        const nextKid = !kidMode;
+                        setKidMode(nextKid);
+                        if (!nextKid) setThreatRadarEnabled(true);
+                        soundFX.playSelect();
+                      }}
+                      className={`p-3 rounded-2xl border text-left transition ${
+                        kidMode
+                          ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100'
+                          : 'bg-rose-500/20 border-rose-400 text-rose-100'
+                      }`}
+                    >
+                      <div className="text-xs font-extrabold">
+                        {kidMode
+                          ? '🪂 Kinder-Modus (Fallschirm)'
+                          : '💎 Arena-Modus (Kristall-Bruch)'}
+                      </div>
+                      <div className="text-[10px] opacity-75 mt-0.5">
+                        {kidMode
+                          ? 'Geschlagene Figuren schweben per Fallschirm'
+                          : 'Geschlagene Figuren zersplittern in 3D-Kristalle'}
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setDungeonPowersEnabled((v) => !v);
+                        soundFX.playSelect();
+                      }}
+                      className={`p-3 rounded-2xl border text-left transition ${
+                        dungeonPowersEnabled
+                          ? 'bg-amber-500/20 border-amber-400 text-amber-100'
+                          : 'bg-white/5 border-white/10 text-white/50'
+                      }`}
+                    >
+                      <div className="text-xs font-extrabold">
+                        ⚡ Superkräfte: {dungeonPowersEnabled ? 'AN' : 'AUS'}
+                      </div>
+                      <div className="text-[10px] opacity-75 mt-0.5">
+                        1x Spezialkraft pro Partie (Schild, Frost, Doppelzug)
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setThreatRadarEnabled((v) => !v);
+                        soundFX.playSelect();
+                      }}
+                      className={`p-3 rounded-2xl border text-left transition ${
+                        threatRadarEnabled
+                          ? 'bg-orange-500/20 border-orange-400 text-orange-100'
+                          : 'bg-white/5 border-white/10 text-white/50'
+                      }`}
+                    >
+                      <div className="text-xs font-extrabold">
+                        🎯 Gefahren-Radar: {threatRadarEnabled ? 'AN' : 'AUS'}
+                      </div>
+                      <div className="text-[10px] opacity-75 mt-0.5">
+                        Zeigt gegnerische Schlagdrohungen als 3D-Linien
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setShowAllNames((v) => !v);
+                        soundFX.playSelect();
+                      }}
+                      className={`p-3 rounded-2xl border text-left transition ${
+                        showAllNames
+                          ? 'bg-amber-500/20 border-amber-400 text-amber-100'
+                          : 'bg-white/5 border-white/10 text-white/50'
+                      }`}
+                    >
+                      <div className="text-xs font-extrabold">
+                        🏷️ Figuren-Namen: {showAllNames ? 'AN' : 'AUS'}
+                      </div>
+                      <div className="text-[10px] opacity-75 mt-0.5">
+                        {showAllNames
+                          ? 'Namen über Figuren eingeblendet'
+                          : 'Freies 3D-Brett ohne Text-Badges'}
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={toggleMusic}
+                      className={`p-3 rounded-2xl border text-left transition ${
+                        musicEnabled
+                          ? 'bg-amber-500/20 border-amber-400 text-amber-100'
+                          : 'bg-white/5 border-white/10 text-white/50'
+                      }`}
+                    >
+                      <div className="text-xs font-extrabold">
+                        🎵 Welt-Musik: {musicEnabled ? 'AN' : 'AUS'}
+                      </div>
+                      <div className="text-[10px] opacity-75 mt-0.5">
+                        Atmosphärische Themen-Musik im Hintergrund
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={toggleSound}
+                      className={`p-3 rounded-2xl border text-left transition ${
+                        soundEnabled
+                          ? 'bg-amber-500/20 border-amber-400 text-amber-100'
+                          : 'bg-white/5 border-white/10 text-white/50'
+                      }`}
+                    >
+                      <div className="text-xs font-extrabold">
+                        🔊 Soundeffekte: {soundEnabled ? 'AN' : 'AUS'}
+                      </div>
+                      <div className="text-[10px] opacity-75 mt-0.5">
+                        Zug-Geräusche, Haptik & Familien-Stimmen
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Extra Buttons + Big Start Match Button */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/15">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => setIsHeroModalOpen(true)}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-purple-600/30 hover:bg-purple-600/50 text-purple-100 border border-purple-400/50 transition"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                      <span>Familie & Stimmen anpassen</span>
+                    </button>
+
+                    <button
+                      onClick={() => setIsScoreboardOpen(true)}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/40 transition"
+                    >
+                      <Trophy className="w-4 h-4 text-amber-400" />
+                      <span>
+                        Pokale (
+                        {scoreboard.goldWins +
+                          scoreboard.purpleWins +
+                          scoreboard.treasureWins}
+                        )
+                      </span>
+                    </button>
+                  </div>
+
                   <button
-                    onClick={() => {
-                      navigator.clipboard?.writeText(gameRef.current.pgn());
-                      showTemporaryBanner('📋 PGN-Zug-Chronik in die Zwischenablage kopiert!');
-                    }}
-                    className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-200 font-bold"
+                    onClick={handleStartMatch}
+                    className="flex items-center gap-2 px-6 py-3 rounded-2xl font-dungeon text-sm sm:text-base font-black bg-gradient-to-r from-amber-400 via-yellow-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-black shadow-[0_0_30px_rgba(251,191,36,0.5)] transition transform hover:scale-[1.02]"
                   >
-                    PGN kopieren
+                    <Swords className="w-5 h-5" />
+                    <span>SPIEL STARTEN</span>
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] font-mono">
-                  {moveHistory.map((san, idx) => (
-                    <div key={idx} className="truncate">
-                      {idx % 2 === 0 ? (
-                        <span className="text-amber-400/70 mr-1">
-                          {Math.floor(idx / 2) + 1}.
-                        </span>
-                      ) : null}
-                      <span className={idx % 2 === 0 ? 'text-amber-200' : 'text-purple-300'}>
-                        {san}
+              </div>
+            ) : (
+              /* TAB 2: SPIELVERLAUF-HISTORIE (AKTUELLE / LETZTE PARTIE & ARCHIV) */
+              <div className="p-5 overflow-y-auto space-y-4">
+                {currentMoveLog.length > 0 && (
+                  <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-400/40 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-amber-300">
+                        📍 Letzte / Aktuelle Partie ({currentMoveLog.length} Halbzüge)
                       </span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard?.writeText(gameRef.current.pgn());
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/40 text-amber-200 text-xs font-bold"
+                      >
+                        PGN kopieren
+                      </button>
                     </div>
-                  ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                      {currentMoveLog.map((entry) => (
+                        <div
+                          key={entry.moveIndex}
+                          className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-black/50 border border-white/10 text-xs text-amber-100"
+                        >
+                          <div className="truncate">
+                            <span className="font-mono text-amber-400 mr-1.5">
+                              {entry.turnNumber}
+                              {entry.color === 'w' ? '.' : '...'}
+                            </span>
+                            <span className="font-bold">{entry.heroName}</span>{' '}
+                            <span className="font-mono text-white">
+                              {entry.from.toUpperCase()}→{entry.to.toUpperCase()}
+                            </span>{' '}
+                            <span className="opacity-65">({entry.san})</span>
+                            {entry.capturedHeroName && (
+                              <span className="text-rose-300 ml-1">
+                                ⚔️ {entry.capturedHeroName}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-mono opacity-50 ml-2">
+                            {entry.timestamp}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-amber-300">
+                      📚 Gespeicherte Partien ({matchHistoryArchive.length})
+                    </h3>
+                    {matchHistoryArchive.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setMatchHistoryArchive([]);
+                          try {
+                            localStorage.removeItem(STORAGE_KEY_MATCH_HISTORY);
+                          } catch {
+                            // ignore
+                          }
+                        }}
+                        className="text-xs text-rose-300/70 hover:text-rose-300 underline"
+                      >
+                        Verlauf leeren
+                      </button>
+                    )}
+                  </div>
+
+                  {matchHistoryArchive.length === 0 ? (
+                    <div className="p-8 rounded-2xl bg-white/5 border border-white/10 text-center text-xs text-amber-100/60">
+                      Noch keine abgeschlossenen Partien im Archiv. Starte ein Spiel – jeder Zug wird automatisch protokolliert!
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {matchHistoryArchive.map((rec) => {
+                        const isExpanded = expandedArchiveId === rec.id;
+                        return (
+                          <div
+                            key={rec.id}
+                            className="rounded-2xl bg-white/5 border border-white/15 overflow-hidden"
+                          >
+                            <button
+                              onClick={() =>
+                                setExpandedArchiveId(isExpanded ? null : rec.id)
+                              }
+                              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-white/5 transition"
+                            >
+                              <div>
+                                <div className="text-xs font-extrabold text-amber-200">
+                                  {rec.resultLabel} •{' '}
+                                  <span className="text-white/80 font-normal">
+                                    {rec.levelName}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-amber-100/60 mt-0.5">
+                                  🕒 {rec.dateLabel} • {rec.totalMoves} Halbzüge
+                                </div>
+                              </div>
+                              <span className="text-xs font-bold text-amber-300">
+                                {isExpanded ? '▲ Ausblenden' : '▼ Züge zeigen'}
+                              </span>
+                            </button>
+
+                            {isExpanded && (
+                              <div className="px-4 pb-3 pt-1 border-t border-white/10 bg-black/40 space-y-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-52 overflow-y-auto">
+                                  {rec.moves.map((m) => (
+                                    <div
+                                      key={m.moveIndex}
+                                      className="flex items-center justify-between px-2.5 py-1 rounded bg-white/5 text-[11px] text-amber-100"
+                                    >
+                                      <span className="truncate">
+                                        <strong className="text-amber-400 font-mono mr-1">
+                                          {m.turnNumber}
+                                          {m.color === 'w' ? '.' : '...'}
+                                        </strong>
+                                        {m.heroName}:{' '}
+                                        <strong className="text-white font-mono">
+                                          {m.from.toUpperCase()}→{m.to.toUpperCase()}
+                                        </strong>{' '}
+                                        ({m.san})
+                                        {m.capturedHeroName
+                                          ? ` ⚔️ ${m.capturedHeroName}`
+                                          : ''}
+                                      </span>
+                                      <span className="font-mono text-[10px] opacity-50 ml-1">
+                                        {m.timestamp}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
-
-            <div className="px-3.5 py-2 rounded-2xl bg-black/75 border border-white/15 backdrop-blur-md text-right space-y-1">
-              <div className="flex items-center justify-end gap-2">
-                <span className="text-[10px] uppercase tracking-wider text-amber-300 font-bold">
-                  {currentLevel.difficultyLabel}
-                </span>
-                {moveHistory.length > 0 && (
-                  <button
-                    onClick={() => setIsChronicleOpen((v) => !v)}
-                    className="px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/20 text-[10px] font-bold text-amber-200"
-                    title="Zug-Chronik ein-/ausblenden"
-                  >
-                    📜 {moveHistory.length} Züge
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center justify-end gap-3 text-xs">
-                <div>
-                  <span className="text-amber-300 font-bold">☀️ Beute: </span>
-                  {capturedByGold.length === 0 ? (
-                    <span className="opacity-40">–</span>
-                  ) : (
-                    capturedByGold.map((r, i) => (
-                      <button
-                        key={i}
-                        onClick={() => handleParachuteComeback('b', r, i)}
-                        disabled={purpleComebackUsed || turnColor !== 'b'}
-                        className="mr-0.5 px-1 rounded bg-amber-500/20 hover:bg-amber-400 hover:text-black transition disabled:opacity-60"
-                        title={`${heroes[r].customName} (Klicke für Crazyhouse-Fallschirm-Comeback!)`}
-                      >
-                        {heroes[r].chessName[0]}
-                      </button>
-                    ))
-                  )}
-                </div>
-                <div className="border-l border-white/20 pl-3">
-                  <span className="text-purple-300 font-bold">🌙 Beute: </span>
-                  {capturedByPurple.length === 0 ? (
-                    <span className="opacity-40">–</span>
-                  ) : (
-                    capturedByPurple.map((r, i) => (
-                      <button
-                        key={i}
-                        onClick={() => handleParachuteComeback('w', r, i)}
-                        disabled={goldComebackUsed || turnColor !== 'w'}
-                        className="mr-0.5 px-1 rounded bg-purple-500/20 hover:bg-amber-400 hover:text-black transition disabled:opacity-60"
-                        title={
-                          !goldComebackUsed
-                            ? `🪂 Klicke, um ${heroes[r].customName} per Fallschirm zurück aufs Brett zu rufen (1x pro Spiel)!`
-                            : heroes[r].customName
-                        }
-                      >
-                        {heroes[r].chessName[0]}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* COUSIN PAWN PROMOTION (KRÖNUNGS-AUSWAHL) MODAL */}
       {pendingPromotion && (
@@ -1709,11 +2010,6 @@ export const App: React.FC = () => {
             <h2 className="font-dungeon text-2xl font-black text-white">
               Wen rufst du zur Verstärkung herbei?
             </h2>
-            <p className="text-xs sm:text-sm text-amber-100/80">
-              Deine Cousine hat das letzte Feld ({pendingPromotion.to.toUpperCase()})
-              erreicht! Wähle, in welches Familienmitglied sie sich mit einer
-              goldenen Licht-Spirale verwandeln soll:
-            </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
               {(['q', 'n', 'b', 'r'] as ('q' | 'n' | 'b' | 'r')[]).map(
                 (role) => {
@@ -1804,25 +2100,6 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-black/50 border border-white/10 space-y-2">
-              <div className="text-xs font-bold text-amber-300 uppercase tracking-wider">
-                Dungeon-Kampagnen-Kronen
-              </div>
-              {DUNGEON_LEVELS.map((lvl) => (
-                <div
-                  key={lvl.id}
-                  className="flex items-center justify-between text-xs text-amber-100"
-                >
-                  <span>{lvl.name}</span>
-                  <span>
-                    {(levelStars[lvl.id] || 0) > 0
-                      ? '👑'.repeat(levelStars[lvl.id])
-                      : 'Noch offen'}
-                  </span>
-                </div>
-              ))}
-            </div>
-
             <div className="flex justify-between items-center pt-1">
               <button
                 onClick={() => {
@@ -1845,19 +2122,19 @@ export const App: React.FC = () => {
                 onClick={() => setIsScoreboardOpen(false)}
                 className="px-4 py-2 rounded-xl bg-amber-500 text-black font-bold text-xs"
               >
-                Weiterzocken!
+                Schließen
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* VICTORY / GAME OVER / TREASURE COMPLETE OVERLAY */}
-      {(isCheckmate || isDraw || isTreasureComplete) && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="max-w-md w-full p-6 rounded-3xl bg-gradient-to-b from-amber-950/95 via-slate-900/95 to-purple-950/95 border-2 border-amber-400 shadow-[0_0_60px_rgba(251,191,36,0.5)] text-center space-y-4">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-400 text-black flex items-center justify-center shadow-lg">
-              <Trophy className="w-9 h-9" />
+      {/* VICTORY / GAME OVER OVERLAY WITH INTEGRATED MOVE HISTORY */}
+      {isMatchActive && (isCheckmate || isDraw || isTreasureComplete) && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="max-w-lg w-full p-6 rounded-3xl bg-gradient-to-b from-amber-950/95 via-slate-900/95 to-purple-950/95 border-2 border-amber-400 shadow-[0_0_60px_rgba(251,191,36,0.5)] text-center space-y-4">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-400 text-black flex items-center justify-center shadow-lg">
+              <Trophy className="w-8 h-8" />
             </div>
             <h2 className="font-dungeon text-2xl sm:text-3xl font-black text-amber-200">
               {isTreasureComplete
@@ -1868,185 +2145,54 @@ export const App: React.FC = () => {
                   : 'DER DUNGEON HAT GESIEGT!'
                 : 'UNENTSCHIEDEN!'}
             </h2>
-            <p className="text-sm text-amber-100/85">
-              {isTreasureComplete
-                ? `Stark gemacht! Du hast ${currentQuest.title} in ${questMovesCount} Zügen gelöst!`
-                : isCheckmate && turnColor === 'b'
-                ? `${heroes.k.customName}, ${heroes.q.customName}, ${heroes.n.customName} und die ganze Familie haben ${currentLevel.name} gemeistert!`
-                : 'Was für eine spannende Schlacht auf dem Runen-Schachbrett!'}
-            </p>
-            <div className="flex items-center justify-center gap-3 pt-2">
+
+            {/* Compact Spielverlauf Summary inside Game Over Screen */}
+            {currentMoveLog.length > 0 && (
+              <div className="text-left p-3 rounded-2xl bg-black/50 border border-white/15 max-h-40 overflow-y-auto space-y-1">
+                <div className="text-[10px] font-extrabold uppercase text-amber-300 mb-1">
+                  📜 Spielverlauf ({currentMoveLog.length} Züge)
+                </div>
+                {currentMoveLog.map((m) => (
+                  <div
+                    key={m.moveIndex}
+                    className="text-xs text-amber-100 flex items-center justify-between"
+                  >
+                    <span>
+                      <strong className="text-amber-400 font-mono mr-1">
+                        {m.turnNumber}
+                        {m.color === 'w' ? '.' : '...'}
+                      </strong>
+                      {m.heroName}: {m.from.toUpperCase()} → {m.to.toUpperCase()}{' '}
+                      ({m.san})
+                    </span>
+                    <span className="text-[10px] opacity-50 font-mono">
+                      {m.timestamp}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
               <button
                 onClick={handleNewGame}
-                className="px-5 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-400 to-orange-500 text-black shadow-lg"
+                className="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-amber-400 to-orange-500 text-black shadow-lg"
               >
-                Nochmal spielen
+                🔄 Nochmal spielen
               </button>
-              {isTreasureComplete && questIndex < TREASURE_QUESTS.length - 1 && (
-                <button
-                  onClick={() => {
-                    const nextIdx = questIndex + 1;
-                    setQuestIndex(nextIdx);
-                    loadTreasureQuest(nextIdx);
-                  }}
-                  className="px-5 py-2.5 rounded-xl font-bold text-sm bg-pink-600 hover:bg-pink-500 text-white border border-pink-300/40"
-                >
-                  Nächste Schatz-Mission →
-                </button>
-              )}
-              {!isTreasureComplete && currentLevelId < 5 && (
-                <button
-                  onClick={() => {
-                    setCurrentLevelId(
-                      (prev) => Math.min(5, prev + 1) as DungeonLevelId
-                    );
-                    handleNewGame();
-                  }}
-                  className="px-5 py-2.5 rounded-xl font-bold text-sm bg-purple-600 hover:bg-purple-500 text-white border border-purple-300/40"
-                >
-                  Nächste Welt →
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  setIsMatchActive(false);
+                  setMenuTab('settings');
+                }}
+                className="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-white/15 hover:bg-white/25 text-white border border-white/20"
+              >
+                ⚙️ Spiel beenden & Settings ändern
+              </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* BOTTOM DOCK: Kid-Helper, Superpowers Toggle, Tipp, Camera Angles & New Game */}
-      <footer
-        className={`relative z-10 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2.5 bg-gradient-to-t from-black/90 via-black/70 to-transparent pointer-events-auto transition-all duration-300 ${
-          isCleanHudMode ? 'hidden' : ''
-        }`}
-      >
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <button
-            onClick={() => {
-              const nextKid = !kidMode;
-              setKidMode(nextKid);
-              if (!nextKid) {
-                setThreatRadarEnabled(true);
-              }
-              soundFX.playSelect();
-            }}
-            title="Schaltet zwischen Kinder-Modus (Fallschirm-Rettung) und Erwachsenen-Arena (Hearthstone-Kristall-Zersplitterung & Gefahren-Radar) um"
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
-              kidMode
-                ? 'bg-emerald-600/90 text-white border-emerald-300/50 shadow-md shadow-emerald-600/20'
-                : 'bg-gradient-to-r from-rose-600 to-purple-700 text-white border-rose-300/60 shadow-md shadow-rose-600/30'
-            }`}
-          >
-            <Baby className="w-4 h-4" />
-            <span>
-              {kidMode
-                ? 'Kinder-Hilfe (🪂 Fallschirm)'
-                : 'Arena-Modus (💎 Kristall-Bruch)'}
-            </span>
-          </button>
-
-          {gameMode !== 'treasure' && (
-            <button
-              onClick={() => {
-                setThreatRadarEnabled((v) => !v);
-                soundFX.playSelect();
-              }}
-              title="XCOM Gefahren-Radar: Zeigt gegnerische Schlag-Drohungen als Laser-Blitze auf dem Brett"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
-                threatRadarEnabled
-                  ? 'bg-orange-600/90 text-white border-amber-300 shadow-md shadow-orange-600/30'
-                  : 'bg-black/60 text-amber-100/70 border-white/15 hover:bg-white/10'
-              }`}
-            >
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>Radar {threatRadarEnabled ? 'AN' : 'AUS'}</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => setDungeonPowersEnabled((v) => !v)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
-              dungeonPowersEnabled
-                ? 'bg-amber-500/90 text-black border-amber-300 shadow-md'
-                : 'bg-black/60 text-amber-100/70 border-white/15 hover:bg-white/10'
-            }`}
-            title="Schaltet die einmaligen Familien-Superkräfte pro Partie an oder aus"
-          >
-            <Zap className="w-3.5 h-3.5" />
-            <span>Superkräfte {dungeonPowersEnabled ? 'AN' : 'AUS'}</span>
-          </button>
-
-          {gameMode !== 'treasure' && (
-            <button
-              onClick={handleShowHint}
-              disabled={isAIThinking}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-600/80 hover:bg-sky-500 text-white border border-sky-300/40 transition disabled:opacity-40"
-            >
-              <Lightbulb className="w-4 h-4 text-amber-200" />
-              <span>Zug-Tipp</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => setShowAllNames((v) => !v)}
-            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
-              showAllNames
-                ? 'bg-amber-500/90 text-black border-amber-300'
-                : 'bg-black/60 text-amber-100/75 border-white/15 hover:bg-white/10'
-            }`}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Alle Namen</span>
-          </button>
-        </div>
-
-        {/* Center Camera Perspectives */}
-        <div className="flex items-center gap-1 bg-black/65 p-1 rounded-xl border border-white/15">
-          <Camera className="w-3.5 h-3.5 text-amber-400 ml-2 mr-1 hidden sm:inline" />
-          {(
-            [
-              { id: 'orbit', label: '3D Frei' },
-              { id: 'table-white', label: 'Team Gold' },
-              { id: 'table-black', label: 'Team Violett' },
-              { id: 'top', label: 'Von Oben' },
-            ] as { id: CameraPreset; label: string }[]
-          ).map((cam) => (
-            <button
-              key={cam.id}
-              onClick={() => setCameraPreset(cam.id)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
-                cameraPreset === cam.id
-                  ? 'bg-amber-500 text-black'
-                  : 'text-amber-100/70 hover:bg-white/10'
-              }`}
-            >
-              {cam.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Right Game Actions */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleUndo}
-            disabled={
-              moveHistory.length === 0 ||
-              isAIThinking ||
-              gameMode === 'treasure'
-            }
-            className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-black/65 hover:bg-white/15 text-amber-100 border border-white/15 transition disabled:opacity-35"
-          >
-            <Undo2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Zug zurück</span>
-          </button>
-
-          <button
-            onClick={handleNewGame}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black shadow-md transition"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Neues Spiel</span>
-          </button>
-        </div>
-      </footer>
 
       {/* Family Hero Customization & Voice Studio Modal */}
       <FamilyHeroModal
