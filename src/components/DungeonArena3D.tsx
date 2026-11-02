@@ -18,7 +18,10 @@ import {
   PieceRole,
   SpecialThemeType,
 } from '../data/familyConfig';
-import { FamilyHeroPiece3D } from './FamilyHeroPiece3D';
+import {
+  FamilyHeroPiece3D,
+  SculptedHeroMesh3D,
+} from './FamilyHeroPiece3D';
 
 export type CameraPreset = 'orbit' | 'top' | 'table-white' | 'table-black';
 
@@ -1224,22 +1227,14 @@ const BattleChessClash3D: React.FC<{
         )}
       </group>
 
-      {/* THE ACTUAL 3D DEFENDER HERO BEING LAUNCHED & FLOATING AWAY UNDER THE ROYAL PARACHUTE! */}
+      {/* THE ACTUAL 3D SCULPTED DEFENDER HERO BEING LAUNCHED & FLOATING AWAY UNDER THE ROYAL PARACHUTE! */}
       <group ref={defenderGroupRef} position={[0, 0.15, 0]}>
-        {/* 1. The Defender Hero 3D Cutout Miniature visibly dangling & waving! */}
-        <Billboard position={[0, 0.42, 0]}>
-          <mesh>
-            <planeGeometry args={[0.92, 1.02]} />
-            <meshStandardMaterial
-              map={defenderTexture}
-              transparent
-              alphaTest={0.12}
-              roughness={0.35}
-              emissive={classSignature.color}
-              emissiveIntensity={0.22}
-            />
-          </mesh>
-        </Billboard>
+        <group position={[0, 0.05, 0]} scale={[0.92, 0.92, 0.92]}>
+          <SculptedHeroMesh3D
+            role={effect.defenderRole}
+            color={effect.attackerColor === 'w' ? 'b' : 'w'}
+          />
+        </group>
 
         {/* 2. Ornate Royal Silk Parachute Canopy directly above the Defender Hero */}
         <group ref={parachuteCanopyRef} position={[0, 0.92, 0]}>
@@ -1600,7 +1595,7 @@ const DungeonStoneTile3D: React.FC<{
         )}
       </group>
 
-      {/* Glowing Dungeon Rune Indicator for Legal Moves */}
+      {/* Glowing Dungeon Rune Indicator + Elevated 3D Target Beacon & Click Pad for Legal Moves */}
       {isLegalTarget && (
         <group
           position={[0, 0.08, 0]}
@@ -1608,27 +1603,57 @@ const DungeonStoneTile3D: React.FC<{
             e.stopPropagation();
             onSquareClick(sq);
           }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            onSquareHover?.(sq);
+            document.body.style.cursor = 'pointer';
+          }}
+          onPointerOut={() => {
+            onSquareHover?.(null);
+            document.body.style.cursor = 'auto';
+          }}
         >
+          {/* Full-square Elevated 3D Target Click Pad so adjacent legal squares are effortless to click! */}
+          <mesh position={[0, 0.14, 0]}>
+            <boxGeometry args={[0.88, 0.32, 0.88]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+
           {isCaptureTarget ? (
-            <mesh rotation={[-Math.PI / 2, 0, 0]}>
-              <ringGeometry args={[0.33, 0.44, 24]} />
-              <meshBasicMaterial
-                color="#ef4444"
-                side={THREE.DoubleSide}
-                transparent
-                opacity={0.92}
-              />
-            </mesh>
+            <>
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.33, 0.45, 24]} />
+                <meshBasicMaterial
+                  color="#ef4444"
+                  side={THREE.DoubleSide}
+                  transparent
+                  opacity={0.95}
+                />
+              </mesh>
+              <mesh position={[0, 0.22, 0]} scale={[0.12, 0.18, 0.12]}>
+                <octahedronGeometry args={[1, 0]} />
+                <meshBasicMaterial color="#ef4444" />
+              </mesh>
+            </>
           ) : (
-            <mesh rotation={[-Math.PI / 2, 0, 0]}>
-              <ringGeometry args={[0.22, 0.32, 20]} />
-              <meshBasicMaterial
-                color={kidMode ? '#34d399' : runeGlowColor}
-                side={THREE.DoubleSide}
-                transparent
-                opacity={0.9}
-              />
-            </mesh>
+            <>
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.2, 0.34, 24]} />
+                <meshBasicMaterial
+                  color={kidMode ? '#34d399' : runeGlowColor}
+                  side={THREE.DoubleSide}
+                  transparent
+                  opacity={0.95}
+                />
+              </mesh>
+              {/* Floating 3D Target Beacon Diamond */}
+              <mesh position={[0, 0.16, 0]} scale={[0.11, 0.16, 0.11]}>
+                <octahedronGeometry args={[1, 0]} />
+                <meshBasicMaterial
+                  color={kidMode ? '#34d399' : runeGlowColor}
+                />
+              </mesh>
+            </>
           )}
         </group>
       )}
@@ -1913,14 +1938,8 @@ const SpectatorMiniHero3D: React.FC<{
   color: 'w' | 'b';
   position: [number, number, number];
   heroConfig: FamilyHeroConfig;
-}> = ({ color, position, heroConfig }) => {
+}> = ({ role, color, position }) => {
   const groupRef = useRef<THREE.Group>(null);
-  const pngPath = useMemo(
-    () => heroConfig.spritePath.replace('.jpg', '.png'),
-    [heroConfig.spritePath]
-  );
-  const texture = useTexture(pngPath);
-  texture.colorSpace = THREE.SRGBColorSpace;
   const isGold = color === 'w';
 
   useFrame((state) => {
@@ -1945,17 +1964,9 @@ const SpectatorMiniHero3D: React.FC<{
           flatShading
         />
       </mesh>
-      <Billboard position={[0, 0.42, 0]}>
-        <mesh>
-          <planeGeometry args={[0.62, 0.68]} />
-          <meshStandardMaterial
-            map={texture}
-            transparent
-            alphaTest={0.1}
-            roughness={0.4}
-          />
-        </mesh>
-      </Billboard>
+      <group position={[0, 0.14, 0]} scale={[0.58, 0.58, 0.58]}>
+        <SculptedHeroMesh3D role={role} color={color} />
+      </group>
     </group>
   );
 };
