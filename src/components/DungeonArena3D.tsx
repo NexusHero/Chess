@@ -1367,12 +1367,29 @@ const DungeonStoneTile3D: React.FC<{
   onSquareHover,
 }) => {
   const groupRef = useRef<THREE.Group>(null);
+  const tileHitboxRef = useRef<THREE.Mesh>(null);
+  const legalHitboxRef = useRef<THREE.Mesh>(null);
+  const noOpRaycast = useMemo(() => () => null, []);
   const pressDepth = useRef(0);
   const stoneTex = useMemo(() => getCarvedStoneTexture(), []);
   const glowTex = useMemo(() => getGlowHaloTexture(), []);
   const islamicTileTex = useMemo(() => getIslamicStarTileTexture(), []);
   const battleScarTex = useMemo(() => getBattleScarTexture(), []);
   const isRamadan = specialTheme === 'ramadan';
+
+  // Ensure ONLY our full-square 0.99x0.99 master hitbox (and elevated legal pad) handle raycasts on the tile!
+  useEffect(() => {
+    if (!groupRef.current) return;
+    groupRef.current.traverse((obj) => {
+      if (
+        obj !== tileHitboxRef.current &&
+        obj !== legalHitboxRef.current &&
+        (obj as THREE.Mesh).isMesh
+      ) {
+        obj.raycast = noOpRaycast;
+      }
+    });
+  }, [scarCount, isSelected, isLastMoveTo, isLegalTarget, isCaptureTarget, isRamadan, noOpRaycast]);
 
   // Deterministic height micro-variation so the 64 flagstones look hand-laid
   const slabHeightOffset = useMemo(
@@ -1446,16 +1463,37 @@ const DungeonStoneTile3D: React.FC<{
 
   return (
     <group position={[tileX, 0, tileZ]}>
+      {/* MASTER FULL-SQUARE 1.0x1.0 HITBOX (Covers 99% of the entire square with zero gaps!) */}
+      <mesh
+        ref={tileHitboxRef}
+        position={[0, 0.04, 0]}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSquareClick(sq);
+        }}
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          onSquareHover?.(sq);
+          if (isLegalTarget) {
+            document.body.style.cursor = 'pointer';
+          }
+        }}
+        onPointerOut={() => {
+          onSquareHover?.(null);
+          document.body.style.cursor = 'auto';
+        }}
+      >
+        <boxGeometry args={[0.99, 0.16, 0.99]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+
       <group ref={groupRef}>
         {/* Deep Stone Block Base (gives thick dark shadow joints between tiles) */}
         <mesh
           position={[0, -0.09, 0]}
           receiveShadow
           castShadow
-          onClick={(e) => {
-            e.stopPropagation();
-            onSquareClick(sq);
-          }}
+          raycast={noOpRaycast}
         >
           <boxGeometry args={[0.92, 0.24, 0.92]} />
           <meshStandardMaterial
@@ -1472,17 +1510,7 @@ const DungeonStoneTile3D: React.FC<{
         <mesh
           position={[0, 0.04, 0]}
           receiveShadow
-          onClick={(e) => {
-            e.stopPropagation();
-            onSquareClick(sq);
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            onSquareHover?.(sq);
-          }}
-          onPointerOut={() => {
-            onSquareHover?.(null);
-          }}
+          raycast={noOpRaycast}
         >
           <boxGeometry args={[0.86, 0.04, 0.86]} />
           <meshStandardMaterial
@@ -1595,33 +1623,55 @@ const DungeonStoneTile3D: React.FC<{
         )}
       </group>
 
-      {/* Glowing Dungeon Rune Indicator + Elevated 3D Target Beacon & Click Pad for Legal Moves */}
+      {/* Glowing Dungeon Rune Indicator + Full-Square 3D Target Beacon & Click Pad for Legal Moves */}
       {isLegalTarget && (
-        <group
-          position={[0, 0.08, 0]}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSquareClick(sq);
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            onSquareHover?.(sq);
-            document.body.style.cursor = 'pointer';
-          }}
-          onPointerOut={() => {
-            onSquareHover?.(null);
-            document.body.style.cursor = 'auto';
-          }}
-        >
-          {/* Full-square Elevated 3D Target Click Pad so adjacent legal squares are effortless to click! */}
-          <mesh position={[0, 0.14, 0]}>
-            <boxGeometry args={[0.88, 0.32, 0.88]} />
+        <group position={[0, 0.08, 0]}>
+          {/* Full-square 0.98x0.28x0.98 Elevated 3D Target Click Pad so the ENTIRE square is effortless to click! */}
+          <mesh
+            ref={legalHitboxRef}
+            position={[0, 0.12, 0]}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSquareClick(sq);
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              onSquareHover?.(sq);
+              document.body.style.cursor = 'pointer';
+            }}
+            onPointerOut={() => {
+              onSquareHover?.(null);
+              document.body.style.cursor = 'auto';
+            }}
+          >
+            <boxGeometry args={[0.98, 0.28, 0.98]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+
+          {/* Full-Square Glowing Target Border so you visually see the whole square is clickable */}
+          <mesh
+            position={[0, 0.005, 0]}
+            rotation={[-Math.PI / 2, 0, Math.PI / 4]}
+            raycast={noOpRaycast}
+          >
+            <ringGeometry args={[0.52, 0.62, 4]} />
+            <meshBasicMaterial
+              color={
+                isCaptureTarget
+                  ? '#ef4444'
+                  : kidMode
+                  ? '#34d399'
+                  : runeGlowColor
+              }
+              side={THREE.DoubleSide}
+              transparent
+              opacity={0.85}
+            />
           </mesh>
 
           {isCaptureTarget ? (
             <>
-              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <mesh rotation={[-Math.PI / 2, 0, 0]} raycast={noOpRaycast}>
                 <ringGeometry args={[0.33, 0.45, 24]} />
                 <meshBasicMaterial
                   color="#ef4444"
@@ -1630,15 +1680,19 @@ const DungeonStoneTile3D: React.FC<{
                   opacity={0.95}
                 />
               </mesh>
-              <mesh position={[0, 0.22, 0]} scale={[0.12, 0.18, 0.12]}>
+              <mesh
+                position={[0, 0.22, 0]}
+                scale={[0.14, 0.2, 0.14]}
+                raycast={noOpRaycast}
+              >
                 <octahedronGeometry args={[1, 0]} />
                 <meshBasicMaterial color="#ef4444" />
               </mesh>
             </>
           ) : (
             <>
-              <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[0.2, 0.34, 24]} />
+              <mesh rotation={[-Math.PI / 2, 0, 0]} raycast={noOpRaycast}>
+                <ringGeometry args={[0.22, 0.36, 24]} />
                 <meshBasicMaterial
                   color={kidMode ? '#34d399' : runeGlowColor}
                   side={THREE.DoubleSide}
@@ -1647,7 +1701,11 @@ const DungeonStoneTile3D: React.FC<{
                 />
               </mesh>
               {/* Floating 3D Target Beacon Diamond */}
-              <mesh position={[0, 0.16, 0]} scale={[0.11, 0.16, 0.11]}>
+              <mesh
+                position={[0, 0.16, 0]}
+                scale={[0.13, 0.18, 0.13]}
+                raycast={noOpRaycast}
+              >
                 <octahedronGeometry args={[1, 0]} />
                 <meshBasicMaterial
                   color={kidMode ? '#34d399' : runeGlowColor}
@@ -2387,7 +2445,11 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
                   dashSize={0.35}
                   dashOffset={0}
                 />
-                <mesh position={[x2, 0.075, z2]} rotation={[-Math.PI / 2, 0, 0]}>
+                <mesh
+                  position={[x2, 0.075, z2]}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  raycast={() => null}
+                >
                   <ringGeometry args={[0.36, 0.46, 6]} />
                   <meshBasicMaterial
                     color="#ef4444"
@@ -2418,7 +2480,11 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
                 dashSize={0.28}
                 dashOffset={0}
               />
-              <mesh position={[x2, 0.07, z2]} rotation={[-Math.PI / 2, 0, 0]}>
+              <mesh
+                position={[x2, 0.07, z2]}
+                rotation={[-Math.PI / 2, 0, 0]}
+                raycast={() => null}
+              >
                 <ringGeometry args={[0.38, 0.45, 24]} />
                 <meshBasicMaterial
                   color="#f97316"
@@ -2461,6 +2527,7 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
               return [x, 0.08, z] as [number, number, number];
             })()}
             rotation={[-Math.PI / 2, 0, 0]}
+            raycast={() => null}
           >
             <ringGeometry args={[0.32, 0.44, 28]} />
             <meshBasicMaterial
@@ -2508,6 +2575,7 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
               return [x, 0.068, z] as [number, number, number];
             })()}
             rotation={[-Math.PI / 2, 0, 0]}
+            raycast={() => null}
           >
             <ringGeometry args={[0.22, 0.31, 24]} />
             <meshBasicMaterial
@@ -2611,6 +2679,7 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
               heroConfig={heroCfg}
               useSecondarySkin={useSecondCousin}
               isSelected={selectedSquare === p.square}
+              hasActiveSelection={Boolean(selectedSquare)}
               isCheckThreatened={isThreatenedKing}
               isShielded={shieldedSquares.includes(p.square)}
               isFrozen={frozenSquares.includes(p.square)}

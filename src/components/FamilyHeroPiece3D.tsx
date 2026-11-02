@@ -19,6 +19,7 @@ interface FamilyHeroPieceProps {
   heroConfig: FamilyHeroConfig;
   useSecondarySkin?: boolean;
   isSelected: boolean;
+  hasActiveSelection?: boolean;
   isCheckThreatened: boolean;
   isShielded?: boolean;
   isFrozen?: boolean;
@@ -1169,6 +1170,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   heroConfig,
   useSecondarySkin = false,
   isSelected,
+  hasActiveSelection = false,
   isCheckThreatened,
   isShielded = false,
   isFrozen = false,
@@ -1180,6 +1182,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   onSelect,
 }) => {
   const groupRef = useRef<THREE.Group>(null);
+  const hitboxMeshRef = useRef<THREE.Mesh>(null);
   const figureRef = useRef<THREE.Group>(null);
   const auraRingRef = useRef<THREE.Mesh>(null);
   const compassOuterRef = useRef<THREE.Group>(null);
@@ -1516,33 +1519,29 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
     }
   });
 
-  // When a piece is ALREADY selected, make its upper body raycast-transparent (`() => null`)
-  // so clicking the adjacent square directly behind its head (`e2 -> e3`) NEVER gets blocked by the piece itself!
+  // Make ALL visual/decorative 3D meshes (head, hair, crown, sword, bow, cape, pedestal, sparkles)
+  // 100% raycast-transparent (`() => null`) so a tall 3D figure NEVER blocks clicks to the square behind it!
   const noOpRaycast = useMemo(() => () => null, []);
 
+  useEffect(() => {
+    if (!groupRef.current) return;
+    groupRef.current.traverse((obj) => {
+      if (obj !== hitboxMeshRef.current && (obj as THREE.Mesh).isMesh) {
+        obj.raycast = noOpRaycast;
+      }
+    });
+  }, [role, useSecondarySkin, isSelected, hasActiveSelection, isShielded, isFrozen, noOpRaycast]);
+
   return (
-    <group
-      ref={groupRef}
-      onClick={(e) => {
-        if (isSelected) return; // Let clicks pass through to adjacent target tiles behind a selected piece!
-        e.stopPropagation();
-        onSelect();
-      }}
-      onPointerOver={(e) => {
-        if (isSelected) return;
-        e.stopPropagation();
-        setHovered(true);
-        document.body.style.cursor = 'pointer';
-      }}
-      onPointerOut={() => {
-        setHovered(false);
-        document.body.style.cursor = 'auto';
-      }}
-    >
-      {/* Compact, Tile-Accurate 3D Hitbox Column (Radius 0.36 so it NEVER spills over onto neighboring squares!) */}
-      {!isSelected && (
+    <group ref={groupRef}>
+      {/* Dedicated Piece Hitbox Cylinder:
+          - Active ONLY when NO piece is currently selected (`!hasActiveSelection`) so clicking any figure is effortless!
+          - When a piece IS selected (`hasActiveSelection === true`), this cylinder turns off so ALL 64 board squares
+            (`DungeonStoneTile3D` 0.99x0.99 full-tile hitboxes) are 100% unobstructed even right behind a tall figure! */}
+      {!hasActiveSelection && (
         <mesh
-          position={[0, 0.48, 0]}
+          ref={hitboxMeshRef}
+          position={[0, 0.28, 0]}
           onClick={(e) => {
             e.stopPropagation();
             onSelect();
@@ -1557,7 +1556,7 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
             document.body.style.cursor = 'auto';
           }}
         >
-          <cylinderGeometry args={[0.35, 0.38, 0.92, 16]} />
+          <cylinderGeometry args={[0.42, 0.44, 0.54, 16]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
       )}
