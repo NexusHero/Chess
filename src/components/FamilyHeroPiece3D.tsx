@@ -63,6 +63,10 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
   const groupRef = useRef<THREE.Group>(null);
   const spriteRef = useRef<THREE.Group>(null);
   const auraRingRef = useRef<THREE.Mesh>(null);
+  const compassOuterRef = useRef<THREE.Group>(null);
+  const compassInnerRef = useRef<THREE.Mesh>(null);
+  const ghost1Ref = useRef<THREE.Group>(null);
+  const ghost2Ref = useRef<THREE.Group>(null);
   const shieldDomeRef = useRef<THREE.Mesh>(null);
   const landingRingRef = useRef<THREE.Mesh>(null);
   const checkAlarmRingRef = useRef<THREE.Mesh>(null);
@@ -305,6 +309,35 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
       auraRingRef.current.rotation.z += delta * (isSelected ? 2.4 : 0.8);
     }
 
+    // Counter-rotating 3D Tactical Rune Compass (Baldur's Gate 3 Selection Ring)
+    if (compassOuterRef.current && isSelected) {
+      compassOuterRef.current.rotation.y += delta * 1.65;
+    }
+    if (compassInnerRef.current && isSelected) {
+      compassInnerRef.current.rotation.z -= delta * 2.4;
+    }
+
+    // Afterimage Ghost Motion-Trail during leap/dash across the board
+    const isMovingNow = jumpProgress.current < 0.98;
+    if (ghost1Ref.current && ghost2Ref.current) {
+      ghost1Ref.current.visible = isMovingNow;
+      ghost2Ref.current.visible = isMovingNow;
+      if (isMovingNow) {
+        const dx = startPos.current.x - currentPos.current.x;
+        const dz = startPos.current.z - currentPos.current.z;
+        ghost1Ref.current.position.set(
+          dx * 0.22,
+          topY + baseScale * 0.45 - hopHeight * 0.22,
+          dz * 0.22
+        );
+        ghost2Ref.current.position.set(
+          dx * 0.44,
+          topY + baseScale * 0.45 - hopHeight * 0.45,
+          dz * 0.44
+        );
+      }
+    }
+
     if (shieldDomeRef.current) {
       shieldDomeRef.current.rotation.y += delta * 1.4;
     }
@@ -337,6 +370,54 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
           opacity={isSelected ? 0.95 : hovered ? 0.8 : 0.52}
         />
       </mesh>
+
+      {/* Baldur's Gate 3 Style Counter-Rotating 3D Tactical Rune Compass when Selected */}
+      {isSelected && (
+        <group position={[0, 0.024, 0]}>
+          <group ref={compassOuterRef}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.45, 0.52, 8]} />
+              <meshBasicMaterial
+                color={primaryTeamColor}
+                side={THREE.DoubleSide}
+                transparent
+                opacity={0.92}
+              />
+            </mesh>
+            {[0, 1, 2, 3].map((dirIdx) => {
+              const a = (dirIdx * Math.PI) / 2;
+              return (
+                <mesh
+                  key={`compass-pt-${dirIdx}`}
+                  position={[Math.cos(a) * 0.54, 0.01, Math.sin(a) * 0.54]}
+                  rotation={[0, -a, 0]}
+                  scale={[0.07, 0.03, 0.12]}
+                >
+                  <octahedronGeometry args={[1, 0]} />
+                  <meshBasicMaterial color="#ffffff" />
+                </mesh>
+              );
+            })}
+          </group>
+          <mesh ref={compassInnerRef} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.32, 0.37, 6]} />
+            <meshBasicMaterial
+              color="#ffffff"
+              side={THREE.DoubleSide}
+              transparent
+              opacity={0.85}
+            />
+          </mesh>
+          <Sparkles
+            count={18}
+            scale={[0.85, 1.1, 0.85]}
+            position={[0, 0.55, 0]}
+            size={4}
+            speed={1.8}
+            color={primaryTeamColor}
+          />
+        </group>
+      )}
 
       {/* 2. Stepped Ornate Square Carved Stone & Gold/Purple-Relief Pedestal (Matches Concept Art!) */}
       {/* Bottom Chiseled Stone Plinth */}
@@ -544,10 +625,10 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
         </mesh>
       )}
 
-      {/* Comet Sparkle Trail while Jumping/Moving */}
+      {/* Comet Sparkle Trail + Glowing Afterimage Ghost Silhouettes while Jumping/Dashing */}
       {jumpProgress.current < 1 && (
         <Sparkles
-          count={26}
+          count={28}
           scale={[0.9, 1.2, 0.9]}
           position={[0, 0.6, 0]}
           size={5}
@@ -555,6 +636,40 @@ export const FamilyHeroPiece3D: React.FC<FamilyHeroPieceProps> = ({
           color={primaryTeamColor}
         />
       )}
+
+      <group ref={ghost1Ref} visible={false}>
+        <Billboard follow={true}>
+          <mesh scale={[baseScale * 0.92, baseScale * 0.92, 1]}>
+            <planeGeometry args={[0.94, 1.04]} />
+            <meshBasicMaterial
+              map={texture}
+              transparent
+              opacity={0.42}
+              alphaTest={0.15}
+              color={primaryTeamColor}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
+        </Billboard>
+      </group>
+
+      <group ref={ghost2Ref} visible={false}>
+        <Billboard follow={true}>
+          <mesh scale={[baseScale * 0.82, baseScale * 0.82, 1]}>
+            <planeGeometry args={[0.94, 1.04]} />
+            <meshBasicMaterial
+              map={texture}
+              transparent
+              opacity={0.24}
+              alphaTest={0.15}
+              color={primaryTeamColor}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
+        </Billboard>
+      </group>
 
       {/* 3. Crisp, Silhouette-Clean 3D Family Hero Miniature Standee (NO muddy background disc, NO floating primitive hats!) */}
       <Billboard

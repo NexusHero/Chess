@@ -164,6 +164,8 @@ export const App: React.FC = () => {
   const [isCleanHudMode, setIsCleanHudMode] = useState<boolean>(false);
   const [pillSpinning, setPillSpinning] = useState<boolean>(false);
   const [showPillHeroTooltip, setShowPillHeroTooltip] = useState<boolean>(false);
+  const [battleScars, setBattleScars] = useState<Record<string, number>>({});
+  const [threatRadarEnabled, setThreatRadarEnabled] = useState<boolean>(false);
 
   // Treasure Hunt Mode State (Princess Mini's Schatzjagd)
   const [questIndex, setQuestIndex] = useState<number>(0);
@@ -502,8 +504,12 @@ export const App: React.FC = () => {
         const voiceUrl = heroes[attackerRole]?.customAudioDataUrl;
 
         if (moveResult.captured) {
-          soundFX.playCapture(voiceUrl);
+          soundFX.playCapture(voiceUrl, !kidMode);
           triggerCaptureEffect(moveResult);
+          setBattleScars((prev) => ({
+            ...prev,
+            [to]: (prev[to] || 0) + 1,
+          }));
           if (moveResult.color === 'w') {
             setCapturedByGold((prev) => [
               ...prev,
@@ -883,6 +889,7 @@ export const App: React.FC = () => {
     setMoveQualityBadge(null);
     setShieldedSquares([]);
     setFrozenSquares([]);
+    setBattleScars({});
     setExtraTurnActive(false);
     setIsAIThinking(false);
     soundFX.playSelect();
@@ -1062,6 +1069,10 @@ export const App: React.FC = () => {
               }
               capturedByGold={gameMode === 'treasure' ? [] : capturedByGold}
               capturedByPurple={gameMode === 'treasure' ? [] : capturedByPurple}
+              battleScars={gameMode === 'treasure' ? {} : battleScars}
+              threatRadarEnabled={
+                gameMode === 'treasure' ? false : threatRadarEnabled
+              }
               kidMode={kidMode}
               showAllNames={showAllNames}
               cameraPreset={cameraPreset}
@@ -1909,16 +1920,46 @@ export const App: React.FC = () => {
       >
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           <button
-            onClick={() => setKidMode((v) => !v)}
+            onClick={() => {
+              const nextKid = !kidMode;
+              setKidMode(nextKid);
+              if (!nextKid) {
+                setThreatRadarEnabled(true);
+              }
+              soundFX.playSelect();
+            }}
+            title="Schaltet zwischen Kinder-Modus (Fallschirm-Rettung) und Erwachsenen-Arena (Hearthstone-Kristall-Zersplitterung & Gefahren-Radar) um"
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
               kidMode
                 ? 'bg-emerald-600/90 text-white border-emerald-300/50 shadow-md shadow-emerald-600/20'
-                : 'bg-black/60 text-amber-100/70 border-white/15 hover:bg-white/10'
+                : 'bg-gradient-to-r from-rose-600 to-purple-700 text-white border-rose-300/60 shadow-md shadow-rose-600/30'
             }`}
           >
             <Baby className="w-4 h-4" />
-            <span>Kinder-Hilfe {kidMode ? 'AN' : 'AUS'}</span>
+            <span>
+              {kidMode
+                ? 'Kinder-Hilfe (🪂 Fallschirm)'
+                : 'Arena-Modus (💎 Kristall-Bruch)'}
+            </span>
           </button>
+
+          {gameMode !== 'treasure' && (
+            <button
+              onClick={() => {
+                setThreatRadarEnabled((v) => !v);
+                soundFX.playSelect();
+              }}
+              title="XCOM Gefahren-Radar: Zeigt gegnerische Schlag-Drohungen als Laser-Blitze auf dem Brett"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+                threatRadarEnabled
+                  ? 'bg-orange-600/90 text-white border-amber-300 shadow-md shadow-orange-600/30'
+                  : 'bg-black/60 text-amber-100/70 border-white/15 hover:bg-white/10'
+              }`}
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>Radar {threatRadarEnabled ? 'AN' : 'AUS'}</span>
+            </button>
+          )}
 
           <button
             onClick={() => setDungeonPowersEnabled((v) => !v)}

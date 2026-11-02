@@ -86,7 +86,7 @@ class DungeonSoundManager {
     chime.stop(now + 0.19);
   }
 
-  public playCapture(customAudioDataUrl?: string) {
+  public playCapture(customAudioDataUrl?: string, adultCrystalShatter: boolean = false) {
     hapticFX.capture();
     // Play recorded family voice if available!
     if (customAudioDataUrl) {
@@ -96,6 +96,38 @@ class DungeonSoundManager {
     const ctx = this.getContext();
     if (!ctx) return;
     const now = ctx.currentTime;
+
+    // 1. Deep Sub-Bass Cinematic Impact Slam
+    const subOsc = ctx.createOscillator();
+    const subGain = ctx.createGain();
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(adultCrystalShatter ? 135 : 110, now);
+    subOsc.frequency.exponentialRampToValueAtTime(28, now + 0.34);
+    subGain.gain.setValueAtTime(adultCrystalShatter ? 0.38 : 0.24, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+    subOsc.connect(subGain);
+    subGain.connect(ctx.destination);
+    subOsc.start(now);
+    subOsc.stop(now + 0.37);
+
+    // 2. Crystalline Rune Shatter Shards (Hearthstone-style high glass/crystal burst in Adult Mode)
+    if (adultCrystalShatter) {
+      const shardFreqs = [1320, 1760, 2240, 2780, 1560, 3120, 2040];
+      shardFreqs.forEach((f, idx) => {
+        const shardOsc = ctx.createOscillator();
+        const shardGain = ctx.createGain();
+        shardOsc.type = idx % 2 === 0 ? 'triangle' : 'sine';
+        const delay = 0.08 + idx * 0.028;
+        shardOsc.frequency.setValueAtTime(f, now + delay);
+        shardOsc.frequency.exponentialRampToValueAtTime(f * 0.72, now + delay + 0.14);
+        shardGain.gain.setValueAtTime(0.11, now + delay);
+        shardGain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.15);
+        shardOsc.connect(shardGain);
+        shardGain.connect(ctx.destination);
+        shardOsc.start(now + delay);
+        shardOsc.stop(now + delay + 0.16);
+      });
+    }
 
     const notes = [220, 330, 440, 660];
     notes.forEach((freq, i) => {

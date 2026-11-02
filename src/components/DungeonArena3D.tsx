@@ -60,6 +60,8 @@ interface DungeonArena3DProps {
   winningTeamColor?: 'w' | 'b' | null;
   capturedByGold?: PieceRole[];
   capturedByPurple?: PieceRole[];
+  battleScars?: Record<string, number>;
+  threatRadarEnabled?: boolean;
   kidMode: boolean;
   showAllNames: boolean;
   cameraPreset: CameraPreset;
@@ -129,6 +131,76 @@ function getIslamicStarTileTexture(): THREE.CanvasTexture {
 
   const tex = new THREE.CanvasTexture(canvas);
   cachedIslamicTileTex = tex;
+  return tex;
+}
+
+// Procedural Glowing Runic Cracks & Sword-Slash Battle Scar Texture for Tiles where Battles Occurred!
+let cachedBattleScarTex: THREE.CanvasTexture | null = null;
+function getBattleScarTexture(): THREE.CanvasTexture {
+  if (cachedBattleScarTex) return cachedBattleScarTex;
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d')!;
+
+  ctx.clearRect(0, 0, 256, 256);
+  ctx.save();
+  ctx.translate(128, 128);
+
+  // Dark scorch crater in center
+  const scorch = ctx.createRadialGradient(0, 0, 4, 0, 0, 96);
+  scorch.addColorStop(0, 'rgba(15, 23, 42, 0.72)');
+  scorch.addColorStop(0.55, 'rgba(245, 158, 11, 0.28)');
+  scorch.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = scorch;
+  ctx.beginPath();
+  ctx.arc(0, 0, 96, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Glowing molten/runic sword slashes & fracture cracks
+  ctx.strokeStyle = '#fbbf24';
+  ctx.shadowColor = '#f97316';
+  ctx.shadowBlur = 12;
+  ctx.lineCap = 'round';
+
+  // Main diagonal sword slash
+  ctx.lineWidth = 4.5;
+  ctx.beginPath();
+  ctx.moveTo(-74, -68);
+  ctx.lineTo(-14, -8);
+  ctx.lineTo(12, 6);
+  ctx.lineTo(78, 72);
+  ctx.stroke();
+
+  // Cross fracture crack
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#fde047';
+  ctx.beginPath();
+  ctx.moveTo(62, -58);
+  ctx.lineTo(8, -12);
+  ctx.lineTo(-18, 18);
+  ctx.lineTo(-66, 54);
+  ctx.stroke();
+
+  // Secondary jagged lightning cracks radiating from impact center
+  ctx.lineWidth = 2;
+  const branches = [
+    [0, 0, -48, 12, -82, 24],
+    [0, 0, 38, -22, 84, -14],
+    [-10, 8, -4, 52, 14, 86],
+    [8, -12, -12, -54, -28, -84],
+  ];
+  for (const [x0, y0, x1, y1, x2, y2] of branches) {
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+  const tex = new THREE.CanvasTexture(canvas);
+  cachedBattleScarTex = tex;
   return tex;
 }
 
@@ -758,9 +830,10 @@ const LavaObstacle3D: React.FC<{ square: string }> = ({ square }) => {
 // Phase 1 (0.00-0.25s): Attacker windup & class-specific spell/weapon impact
 // Phase 2 (0.25-0.45s): White-gold hit-stop flash + defender hit-recoil & ground crater shockwave
 // Phase 3 (0.45-3.10s): Defender pops out of their crumbling stone pedestal and floats visibly under a 3D royal silk parachute toward the spectator sideline!
-const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
-  effect,
-}) => {
+const BattleChessClash3D: React.FC<{
+  effect: ActiveCaptureEffect;
+  kidMode: boolean;
+}> = ({ effect, kidMode }) => {
   const elapsed = useRef(0);
   const shockwaveRingRef = useRef<THREE.Mesh>(null);
   const innerBurstRef = useRef<THREE.Mesh>(null);
@@ -768,6 +841,7 @@ const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
   const defenderGroupRef = useRef<THREE.Group>(null);
   const parachuteCanopyRef = useRef<THREE.Group>(null);
   const debrisGroupRef = useRef<THREE.Group>(null);
+  const crystalShardsRef = useRef<THREE.Group>(null);
   const flashLightRef = useRef<THREE.PointLight>(null);
 
   const glowTex = useMemo(() => getGlowHaloTexture(), []);
@@ -828,6 +902,22 @@ const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
     });
   }, []);
 
+  // 22 Hearthstone-Style Rune Crystal Shards when Defender Shatters in Adult Mode (!kidMode)
+  const crystalShards = useMemo(() => {
+    return Array.from({ length: 22 }, (_, i) => {
+      const angle = (i * Math.PI * 2) / 22 + (i % 2) * 0.14;
+      const speed = 1.4 + (i % 4) * 0.65;
+      return {
+        vx: Math.cos(angle) * speed + knockDir[0] * 0.85,
+        vy: 2.2 + (i % 5) * 0.55,
+        vz: Math.sin(angle) * speed + knockDir[1] * 0.85,
+        sx: 0.08 + (i % 3) * 0.04,
+        sy: 0.16 + (i % 4) * 0.06,
+        sz: 0.08 + (i % 3) * 0.04,
+      };
+    });
+  }, [knockDir]);
+
   useFrame((state, delta) => {
     elapsed.current += delta;
     const t = elapsed.current;
@@ -880,37 +970,65 @@ const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
     }
 
     // 5. VISIBLE 3D DEFENDER HERO:
-    //    - 0.00s..0.38s: Stands on square, gets hit-flashed, squashed & trembles in knockback!
-    //    - 0.38s..3.10s: Parachute deploys overhead and carries the actual 3D Defender Hero smoothly toward the spectator bench!
+    //    - 0.00s..0.34s: Stands on square, gets hit-flashed, squashed & trembles in Hit-Stop knockback!
+    //    - If kidMode === true: Parachute deploys overhead and carries the 3D Defender Hero smoothly toward the spectator bench!
+    //    - If kidMode === false (Adult Arena Mode): Defender fractures and shatters into 22 glowing 3D Rune Crystals at t=0.34s!
     if (defenderGroupRef.current) {
-      if (t < 0.38) {
+      if (t < 0.34) {
         // Hit-stop knockback & squash/shake on the board!
-        const recoil = Math.sin((t / 0.38) * Math.PI) * 0.26;
-        const shake = Math.sin(state.clock.elapsedTime * 65) * 0.06;
+        const recoil = Math.sin((t / 0.34) * Math.PI) * 0.28;
+        const shake = Math.sin(state.clock.elapsedTime * 68) * 0.07;
         defenderGroupRef.current.position.set(
           knockDir[0] * recoil + shake,
-          0.12 + Math.sin((t / 0.38) * Math.PI) * 0.35,
+          0.12 + Math.sin((t / 0.34) * Math.PI) * 0.35,
           knockDir[1] * recoil
         );
         defenderGroupRef.current.rotation.z =
-          Math.sin(state.clock.elapsedTime * 45) * 0.22;
-      } else {
+          Math.sin(state.clock.elapsedTime * 48) * 0.24;
+        defenderGroupRef.current.scale.setScalar(1);
+      } else if (kidMode) {
         // Smooth Parachute Ascent & Glide toward the Spectator Sideline!
-        const flightProgress = Math.min(1, (t - 0.38) / 2.6);
+        const flightProgress = Math.min(1, (t - 0.34) / 2.6);
         const easeOut = 1 - Math.pow(1 - flightProgress, 2.2);
         const glideX = sidelineTargetX * easeOut * 0.72;
         const glideY = 0.45 + flightProgress * 2.65;
         const glideZ = knockDir[1] * 0.35 * (1 - flightProgress);
         defenderGroupRef.current.position.set(glideX, glideY, glideZ);
-        // Gentle pendulum swing under the parachute
         defenderGroupRef.current.rotation.z =
           Math.sin(state.clock.elapsedTime * 5.5) * 0.16;
+        defenderGroupRef.current.scale.setScalar(1);
+      } else {
+        // Adult Mode: Rapidly implode/shatter cutout as the 3D crystal shards burst out!
+        const shatterFade = Math.max(0.001, 1 - (t - 0.34) / 0.12);
+        defenderGroupRef.current.scale.set(
+          shatterFade * 1.35,
+          shatterFade * 0.65,
+          shatterFade
+        );
       }
     }
 
-    // 6. Parachute Canopy Pop-Open Elastic Animation at t=0.32s
+    // 5b. Hearthstone-Style 3D Rune Crystal Shards Explosion Physics in Adult Mode (!kidMode)
+    if (crystalShardsRef.current) {
+      crystalShardsRef.current.visible = !kidMode && t >= 0.3;
+      if (!kidMode && t >= 0.3) {
+        const st = Math.min(t - 0.3, 2.2);
+        crystalShardsRef.current.children.forEach((shard, idx) => {
+          const cs = crystalShards[idx];
+          if (!cs) return;
+          const yPos = Math.max(0.04, 0.45 + cs.vy * st - 5.4 * st * st);
+          shard.position.set(cs.vx * st, yPos, cs.vz * st);
+          shard.rotation.x += delta * (9 + (idx % 5));
+          shard.rotation.y += delta * (7 + (idx % 4));
+          const fade = Math.max(0, 1 - st / 1.85);
+          shard.scale.set(cs.sx * fade, cs.sy * fade, cs.sz * fade);
+        });
+      }
+    }
+
+    // 6. Parachute Canopy Pop-Open Elastic Animation at t=0.32s (only in kidMode)
     if (parachuteCanopyRef.current) {
-      if (t < 0.28) {
+      if (!kidMode || t < 0.28) {
         parachuteCanopyRef.current.scale.setScalar(0.001);
       } else {
         const popT = Math.min(1, (t - 0.28) / 0.25);
@@ -979,6 +1097,32 @@ const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
             />
           </mesh>
         ))}
+      </group>
+
+      {/* Hearthstone-Style 22 Glowing 3D Rune Crystal Shards Explosion (Adult Battle Mode: !kidMode) */}
+      <group ref={crystalShardsRef} visible={false}>
+        {crystalShards.map((_, idx) => {
+          const isGoldDefender = effect.attackerColor === 'b';
+          const shardColor =
+            idx % 3 === 0
+              ? classSignature.color
+              : isGoldDefender
+              ? '#fbbf24'
+              : '#c084fc';
+          return (
+            <mesh key={`shard-${idx}`} castShadow>
+              <octahedronGeometry args={[1, 0]} />
+              <meshStandardMaterial
+                color={shardColor}
+                emissive={shardColor}
+                emissiveIntensity={1.35}
+                roughness={0.12}
+                metalness={0.75}
+                flatShading
+              />
+            </mesh>
+          );
+        })}
       </group>
 
       {/* Class-Specific 3D Signature Weapon / Magic Impact Effect */}
@@ -1172,7 +1316,9 @@ const BattleChessClash3D: React.FC<{ effect: ActiveCaptureEffect }> = ({
                 alt={effect.defenderName}
                 className="w-9 h-9 rounded-xl object-cover border border-purple-400 opacity-80 -rotate-12"
               />
-              <span className="absolute -top-2.5 -right-1 text-sm">🪂</span>
+              <span className="absolute -top-2.5 -right-1 text-sm">
+                {kidMode ? '🪂' : '💎'}
+              </span>
             </div>
           </div>
         </div>
@@ -1199,6 +1345,8 @@ const DungeonStoneTile3D: React.FC<{
   kidMode: boolean;
   runeGlowColor: string;
   specialTheme?: SpecialThemeType;
+  scarCount?: number;
+  checkmateOriginPos?: [number, number, number] | null;
   onSquareClick: (sq: Square) => void;
   onSquareHover?: (sq: Square | null) => void;
 }> = ({
@@ -1218,6 +1366,8 @@ const DungeonStoneTile3D: React.FC<{
   kidMode,
   runeGlowColor,
   specialTheme = 'default',
+  scarCount = 0,
+  checkmateOriginPos = null,
   onSquareClick,
   onSquareHover,
 }) => {
@@ -1226,6 +1376,7 @@ const DungeonStoneTile3D: React.FC<{
   const stoneTex = useMemo(() => getCarvedStoneTexture(), []);
   const glowTex = useMemo(() => getGlowHaloTexture(), []);
   const islamicTileTex = useMemo(() => getIslamicStarTileTexture(), []);
+  const battleScarTex = useMemo(() => getBattleScarTexture(), []);
   const isRamadan = specialTheme === 'ramadan';
 
   // Deterministic height micro-variation so the 64 flagstones look hand-laid
@@ -1268,13 +1419,25 @@ const DungeonStoneTile3D: React.FC<{
     }
   }, [isLastMoveTo, isSelected]);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
     if (pressDepth.current > 0) {
       pressDepth.current = Math.max(0, pressDepth.current - delta * 2.5);
     }
+    // 3D Domino-Ripple Earthquake Wave across all 64 stone slabs upon Checkmate!
+    let checkmateWaveY = 0;
+    if (checkmateOriginPos) {
+      const dist = Math.hypot(
+        tileX - checkmateOriginPos[0],
+        tileZ - checkmateOriginPos[2]
+      );
+      checkmateWaveY =
+        Math.sin(state.clock.elapsedTime * 6.5 - dist * 1.65) * 0.12;
+    }
     const yOffset =
-      slabHeightOffset - Math.sin(pressDepth.current * Math.PI) * 0.075;
+      slabHeightOffset -
+      Math.sin(pressDepth.current * Math.PI) * 0.075 +
+      checkmateWaveY;
     groupRef.current.position.y = yOffset;
   });
 
@@ -1336,6 +1499,39 @@ const DungeonStoneTile3D: React.FC<{
             emissiveIntensity={emissiveIntensity * 1.15}
           />
         </mesh>
+
+        {/* Persistent Glowing Battlefield Scars (Sword Slashes & Molten Rune Cracks that intensify with multiple battles!) */}
+        {scarCount > 0 && (
+          <group position={[0, 0.064, 0]}>
+            <mesh
+              rotation={[-Math.PI / 2, 0, ((rIdx * 3 + cIdx * 5) % 4) * (Math.PI / 2)]}
+            >
+              <planeGeometry args={[0.8, 0.8]} />
+              <meshBasicMaterial
+                map={battleScarTex}
+                transparent
+                opacity={Math.min(1, 0.58 + scarCount * 0.18)}
+                depthWrite={false}
+              />
+            </mesh>
+            {scarCount >= 2 && (
+              <mesh
+                position={[0, 0.001, 0]}
+                rotation={[-Math.PI / 2, 0, Math.PI / 4]}
+              >
+                <planeGeometry args={[0.78, 0.78]} />
+                <meshBasicMaterial
+                  map={battleScarTex}
+                  color="#ef4444"
+                  transparent
+                  opacity={Math.min(0.95, 0.45 + (scarCount - 1) * 0.2)}
+                  blending={THREE.AdditiveBlending}
+                  depthWrite={false}
+                />
+              </mesh>
+            )}
+          </group>
+        )}
 
         {/* Soft Additive Bloom Halo + Glowing Carved Rune Glyph (or Islamic 8-Pointed Star & Crescent Inlay in Ramadan!) */}
         {(runeInfo.showRune || isSelected || isLastMoveTo || isLegalTarget) && (
@@ -1868,6 +2064,8 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
   winningTeamColor = null,
   capturedByGold = [],
   capturedByPurple = [],
+  battleScars = {},
+  threatRadarEnabled = false,
   kidMode,
   showAllNames,
   cameraPreset,
@@ -1882,6 +2080,46 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
         : null,
     [selectedSquare, hoveredSquare, legalMoves]
   );
+
+  // Compute Checkmate Ripple Wave Origin (position of the defeated King)
+  const checkmateOriginPos = useMemo(() => {
+    if (!winningTeamColor) return null;
+    const losingColor = winningTeamColor === 'w' ? 'b' : 'w';
+    const b = game.board();
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const cell = b[r][c];
+        if (cell && cell.type === 'k' && cell.color === losingColor) {
+          const sq = `${FILES[c]}${RANKS[r]}` as Square;
+          return squareToWorld(sq);
+        }
+      }
+    }
+    return [0, 0, 0] as [number, number, number];
+  }, [winningTeamColor, game, fen]);
+
+  // Compute Enemy Threat Radar Lines (all acute capture threats from the opponent!)
+  const enemyThreatLines = useMemo(() => {
+    if (!threatRadarEnabled) return [];
+    try {
+      const fenParts = fen.split(' ');
+      if (fenParts.length < 2) return [];
+      const activeTurn = fenParts[1];
+      const oppTurn = activeTurn === 'w' ? 'b' : 'w';
+      fenParts[1] = oppTurn;
+      fenParts[3] = '-'; // clear en-passant for safe FEN parsing
+      const oppGame = new Chess(fenParts.join(' '));
+      const oppCaptures = oppGame
+        .moves({ verbose: true })
+        .filter((m) => Boolean(m.captured));
+      return oppCaptures.map((m) => ({
+        from: m.from as Square,
+        to: m.to as Square,
+      }));
+    } catch {
+      return [];
+    }
+  }, [threatRadarEnabled, fen]);
 
   const boardPieces = useMemo(() => {
     const b = game.board();
@@ -2108,6 +2346,8 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
                 kidMode={kidMode}
                 runeGlowColor={level.theme.runeGlowColor}
                 specialTheme={level.specialTheme}
+                scarCount={battleScars[sq] || 0}
+                checkmateOriginPos={checkmateOriginPos}
                 onSquareClick={onSquareClick}
                 onSquareHover={setHoveredSquare}
               />
@@ -2115,6 +2355,70 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
           })
         )}
       </group>
+
+      {/* XCOM-Style Tactical Agro Threat Beams from Selected Hero to All Capturable Enemies */}
+      {selectedSquare &&
+        legalMoves
+          .filter((m) => m.isCapture)
+          .map((m) => {
+            const [x1, , z1] = squareToWorld(selectedSquare);
+            const [x2, , z2] = squareToWorld(m.to);
+            return (
+              <group key={`agro-${selectedSquare}-${m.to}`}>
+                <QuadraticBezierLine
+                  start={[x1, 0.22, z1]}
+                  end={[x2, 0.22, z2]}
+                  mid={[(x1 + x2) / 2, 0.72, (z1 + z2) / 2]}
+                  color="#ef4444"
+                  lineWidth={3}
+                  dashed
+                  dashScale={8}
+                  dashSize={0.35}
+                  dashOffset={0}
+                />
+                <mesh position={[x2, 0.075, z2]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <ringGeometry args={[0.36, 0.46, 6]} />
+                  <meshBasicMaterial
+                    color="#ef4444"
+                    side={THREE.DoubleSide}
+                    transparent
+                    opacity={0.9}
+                  />
+                </mesh>
+              </group>
+            );
+          })}
+
+      {/* Enemy Threat Radar Warning Beams (Shows where the opponent threatens to capture your heroes!) */}
+      {threatRadarEnabled &&
+        enemyThreatLines.map((threat, idx) => {
+          const [x1, , z1] = squareToWorld(threat.from);
+          const [x2, , z2] = squareToWorld(threat.to);
+          return (
+            <group key={`radar-${idx}-${threat.from}-${threat.to}`}>
+              <QuadraticBezierLine
+                start={[x1, 0.18, z1]}
+                end={[x2, 0.18, z2]}
+                mid={[(x1 + x2) / 2, 0.58, (z1 + z2) / 2]}
+                color="#f97316"
+                lineWidth={2.2}
+                dashed
+                dashScale={10}
+                dashSize={0.28}
+                dashOffset={0}
+              />
+              <mesh position={[x2, 0.07, z2]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[0.38, 0.45, 24]} />
+                <meshBasicMaterial
+                  color="#f97316"
+                  side={THREE.DoubleSide}
+                  transparent
+                  opacity={0.85}
+                />
+              </mesh>
+            </group>
+          );
+        })}
 
       {/* Live Tactical 3D Jump-Arc Preview Bridge when Hovering a Legal Move Square */}
       {selectedSquare && hoveredLegalMove && (
@@ -2323,7 +2627,9 @@ export const DungeonArena3D: React.FC<DungeonArena3DProps> = ({
       )}
 
       {/* Battle-Chess 3D Clash Effect & Speech Bubble */}
-      {captureEffect && <BattleChessClash3D effect={captureEffect} />}
+      {captureEffect && (
+        <BattleChessClash3D effect={captureEffect} kidMode={kidMode} />
+      )}
 
       <CameraDirector preset={cameraPreset} captureEffect={captureEffect} />
     </>
